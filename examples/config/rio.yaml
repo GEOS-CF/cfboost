@@ -1,0 +1,24 @@
+locations:
+  rio_bangu:
+    lat: -22.88791
+    lon: -43.47107
+    name: 'Bangu'
+  rio_campogrande:
+    lat: -22.88626
+    lon: -43.55652
+    name: 'Campo_Grande'
+
+species:
+  o3:
+    prediction_type: 'tend'
+  pm25:
+    prediction_type: 'tend'
+
+observations:
+  obsfile: '/discover/nobackup/projects/gmao/geos_cf_dev/obs/Rio/%n_2018.csv'
+
+model:
+  config: 'cf_config.yaml'
+
+bstfile: 'rio_bst_%l_%s_%t.pkl'
+predfile: 'rio_%Y%M%d_%l.csv'

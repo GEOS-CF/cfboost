@@ -1,0 +1,16 @@
+# Tested on Discover with: module load other/python/GEOSpyD/Ana2019.03_py3.7
+
+### Required packages ###
+logging
+argparse
+sys
+os
+glob
+datetime
+dateutil
+numpy
+pandas
+xarray
+matplotlib
+yaml
+xgboost
