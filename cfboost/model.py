@@ -13,13 +13,14 @@ import pandas
 import logging
 import datetime as dt
 import pandas as pd
-import cfobs.cfobs_load as cfobs_load
+
+from cfobs.cfobs_load import load as cfobs_load
 
 from .cf2csv import cf2csv
 from .tools  import filename_parse
 
 
-def model_load(config_cf,location='',startday=None,error_if_missing=True,**kwargs):
+def model_load(config_cf,location='',error_if_missing=True,**kwargs):
     '''Load the model data.'''
     log = logging.getLogger(__name__)
 #---Load model data
@@ -28,14 +29,12 @@ def model_load(config_cf,location='',startday=None,error_if_missing=True,**kwarg
         ofile_template = 'cf_%l.csv'
         log.warning('No template for output file found - will use default {}'.format(ofile_template))
     modfile = filename_parse(ofile_template,loc=location)
-    if os.path.isfile(modfile):
-        mod = cfobs_load.load(file_template=obsfile,startday=startday,**kwargs)
-    else:
-        mod = None
-    if mod is None and error_if_missing:
-        log.error('File does not exist: {}'.format(modfile),exc_info=True)
+    mod = cfobs_load(file_template=modfile,**kwargs)
+    if mod.shape[0] == 0:
+        if error_if_missing:
+            log.error('File does not exist: {}'.format(modfile),exc_info=True)
 #---Reduce to variables & apply scale factors
-    if mod is not None:
+    else:
         mod = _check_vars(mod,config_cf)
     return mod
 
@@ -72,12 +71,13 @@ def _check_vars(mod,config_cf):
     collections = config_cf.get('collections')
     for col in collections.keys():
         vars = collections.get(col).get('vars')
-        for var in vars: 
-            if var not in mod.keys():
-                log.error('Variable not found in CF file: {}'.format(var),exc_info=True)
-                return None
+        for var in vars:
+            ivar = vars.get(var).get('name_on_file',var) 
             scal = vars.get(var).get('scal',1.0)
-            mod_out[var] = mod[var].values*scal
+            if ivar not in mod.keys():
+                log.error('Variable not found in CF file: {}'.format(ivar),exc_info=True)
+                return None
+            mod_out[var] = mod[ivar].values*scal
     del mod
     return mod_out
 

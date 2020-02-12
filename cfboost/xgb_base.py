@@ -9,6 +9,7 @@
 # 20200203 - christoph.a.keller at nasa.gov - Initial version 
 # ****************************************************************************
 import os
+import numpy as np
 import pickle 
 import xgboost as xgb
 import logging
@@ -25,7 +26,7 @@ class BoosterObj(object):
     '''
     Booster object. 
     '''
-    def __init__(self,bstfile,cfconfig,spec,mw,type,unit,location,lat,lon):
+    def __init__(self,bstfile,cfconfig,spec,mw,type,unit,location,lat,lon,validation_figures=None):
         self._bstfile = bstfile
         self._cfconfig = cfconfig
         self._spec = spec 
@@ -36,26 +37,34 @@ class BoosterObj(object):
         self._lat = lat 
         self._lon = lon 
         self._bst = None
+        self._feature_names = None
+        self._validation_figures = validation_figures if validation_figures is not None else 'xgb_%k_%l_%s_%t.png'
 
 
-    def train(self,Xtrain,Ytrain,resume=True):
+    def train(self,Xtrain,Ytrain,resume=True,params={'booster':'gbtree'}):
         '''Train model'''
-        log = logging.getLogger(__name__)       
-        train = xgb.DMatrix(Xtrain,Ytrain)
-        param = {'booster' :'gbtree'}        
+        log = logging.getLogger(__name__)
+        Xtrain = self._check_features(Xtrain)
+        if Xtrain is None:
+            return
+        train = xgb.DMatrix(Xtrain,np.array(Ytrain))
         if self._bst is not None and not resume:
             self._bst = None
         log.info('Training XGBoost model...')
-        self._bst = xgb.train(param,train,xgb_model=self._bst)
+        self._bst = xgb.train(params,train,xgb_model=self._bst)
         return
 
 
     def predict(self,Xpred):
         '''Make prediction'''
+        log = logging.getLogger(__name__)
+        Xpred = self._check_features(Xpred)
+        if Xpred is None:
+            return None,None
         pred = xgb.DMatrix(Xpred)
         prediction = self._bst.predict(pred)
         prior = np.array(Xpred[self._spec])
-        if self._type == 'tend':
+        if self._type == 'bias':
             prediction = prior + prediction
         return prior,prediction
 
@@ -63,8 +72,8 @@ class BoosterObj(object):
     def validate(self,Xvalid,Yvalid):
         '''Validate model'''
         log = logging.getLogger(__name__)       
-        o_valid,p_valid,t_valid = self.prediction_and_truth(Xvalid,Yvalid)
-        self.make_scatter_plot(o_valid,p_valid,t_valid)
+        prior,prediction,truth = self.prediction_and_truth(Xvalid,Yvalid)
+        self.make_scatter_plot(prior,prediction,truth)
         self.make_features_plot()
         return
 
@@ -73,7 +82,7 @@ class BoosterObj(object):
         '''Return predicted and true value'''
         prior,prediction = self.predict(X)
         truth = np.array(Y)
-        if self._type=='tend':
+        if self._type=='bias':
             truth = prior + truth
         return prior,prediction,truth
 
@@ -81,20 +90,20 @@ class BoosterObj(object):
     def make_scatter_plot(self,orig,predict,truth,title="Scatter plot %s at %l",minval=None,maxval=None):
         '''Make scatter plot and save figure'''
         log = logging.getLogger(__name__)       
-        nfig = 3 if self._type == 'tend' else 2
-        fig, axs = plt.subplots(1,nfig)
+        nfig = 3 if self._type == 'bias' else 2
+        fig, axs = plt.subplots(1,nfig,figsize=(nfig*5,5))
         ii = 0
-        if self._type == "tend": 
-            title = 'Tendencies'
+        if self._type == "bias": 
+            ititle = 'Bias'
             x = predict-orig
             y = truth-orig
             m1 = min((min(x),min(y)))
             m2 = max((max(x),max(y)))
             maxval = max((abs(m1),abs(m2)))
             minval = -maxval
-            xlab   = "Predicted tendency ["+self._unit+"]"
-            ylab   = "True tendency ["+self._unit+"]"
-            axs[ii] = plot_scatter(axs[ii],x,y,minval,maxval,xlab,ylab,title)
+            xlab   = "Predicted bias ["+self._unit+"]"
+            ylab   = "True bias ["+self._unit+"]"
+            axs[ii] = plot_scatter(axs[ii],x,y,minval,maxval,xlab,ylab,ititle)
             ii += 1
         m1 = min((min(orig),min(truth),min(predict)))
         m2 = max((max(orig),max(truth),max(predict)))
@@ -102,17 +111,17 @@ class BoosterObj(object):
         mnval = -maxval
         minval = mnval if minval is None else minval
         maxval = mxval if maxval is None else maxval
-        title = 'Original model (GEOS-CF)'
+        ititle = 'Original (GEOS-CF)'
         xlab   = "Predicted concentration ["+self._unit+"]"
         ylab   = "True concentration ["+self._unit+"]"
-        axs[ii] = plot_scatter(axs[ii],orig,truth,minval,maxval,xlab,ylab,title)
+        axs[ii] = plot_scatter(axs[ii],orig,truth,minval,maxval,xlab,ylab,ititle)
         ii += 1
-        title = 'Adjusted model (XGBoost)'
-        axs[ii] = plot_scatter(axs[ii],predict,truth,minval,maxval,xlab,ylab,title)
+        title = 'Adjusted (XGBoost)'
+        axs[ii] = plot_scatter(axs[ii],predict,truth,minval,maxval,xlab,ylab,ititle)
         title = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
-        #plt.tight_layout()
-        ofile = filename_parse(ofile,self._location,self._spec,self._type) 
+        plt.tight_layout()
+        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','scatter')
         fig.savefig(ofile)
         log.info('Scatter plot written to {}'.format(ofile))
@@ -136,7 +145,7 @@ class BoosterObj(object):
         title  = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
         plt.tight_layout()
-        ofile = filename_parse(ofile,self._location,self._spec,self._type) 
+        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','features')
         fig.savefig(ofile)
         log.info('Scatter plot written to {}'.format(ofile))
@@ -144,11 +153,30 @@ class BoosterObj(object):
         return
 
 
+    def _check_features(self,X):
+        '''Make sure that columns in input array X are correctly ordered and all features are available'''
+        log = logging.getLogger(__name__)
+        features = X.columns.tolist()
+        if self._feature_names is None:
+            self._feature_names = features
+            Xnew = X.copy()
+        else:
+            # check that all needed features are available
+            for v in self._feature_names:
+                if v not in features:
+                    log.error('Feature "{}" not in input array'.format(v),exc_info=True)
+                    return None
+            # make sure order is correct
+            Xnew = X[self._feature_names].copy()
+        del X
+        return Xnew
+
+
 def plot_scatter(ax,x,y,minval,maxval,xlab,ylab,title):
     # statistics
     r,p = stats.pearsonr(x,y)
-    nrmse = sqrt(mean_squared_error(x,y))/np.std(x)
-    nmb   = np.sum(y-x)/np.sum(x)
+    nrmse = np.sqrt(mean_squared_error(x,y))/np.std(x)
+    mb   = np.sum(y-x)/np.sum(x)
     slope, intercept, r_value, p_value, std_err = stats.linregress(x,y)
     ax.hexbin(x,y,cmap=plt.cm.gist_earth_r,bins='log')
     ax.set_xlim(minval,maxval)
@@ -160,14 +188,15 @@ def plot_scatter(ax,x,y,minval,maxval,xlab,ylab,title):
     if ylab != '-':
         ax.set_ylabel(ylab)
     istr = 'N = {:,}'.format(y.shape[0])
-    ax.text(0.05,0.95,istr,transform=ax.transAxes)
-    istr = 'R$^{2}$={0:.2f}'.format(r**2)
-    ax.text(0.05,0.90,istr,transform=ax.transAxes)
+    _ = ax.text(0.05,0.95,istr,transform=ax.transAxes)
+    istr = '{0:.2f}'.format(r**2)
+    istr = 'R$^{2}$ = '+istr
+    _ = ax.text(0.05,0.90,istr,transform=ax.transAxes)
     istr = 'NRMSE [%] = {0:.2f}'.format(nrmse*100)
-    ax.text(0.05,0.85,istr,transform=ax.transAxes)
+    _ = ax.text(0.05,0.85,istr,transform=ax.transAxes)
     #istr = 'NMB [%] = {0:.2f}'.format(nmb*100)
     #ax.text(0.05,0.80,istr,transform=ax.transAxes)
-    ax.set_title(title)
+    _ = ax.set_title(title)
     return ax
 
 
