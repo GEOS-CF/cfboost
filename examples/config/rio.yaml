@@ -2,23 +2,27 @@ locations:
   rio_bangu:
     lat: -22.88791
     lon: -43.47107
-    name: 'Bangu'
-  rio_campogrande:
-    lat: -22.88626
-    lon: -43.55652
-    name: 'Campo_Grande'
+    name_in_obsfile: 'Bangu'
+  rio_iraja:
+    lat: -22.8316
+    lon: -43.4268
+    name_in_obsfile: 'Iraja'
 
 species:
   o3:
-    prediction_type: 'tend'
-  pm25:
-    prediction_type: 'tend'
+    prediction_type: 'bias'
+    MW: 48.0 
+  pm25_gcc:
+    prediction_type: 'bias'
+    name_in_obsfile: 'pm25'
 
 observations:
-  obsfile: '/discover/nobackup/projects/gmao/geos_cf_dev/obs/Rio/%n_2018.csv'
+  obsfile: 'inputs/Rio_2018.csv'
 
 model:
   config: 'cf_config.yaml'
 
-bstfile: 'rio_bst_%l_%s_%t.pkl'
-predfile: 'rio_%Y%M%d_%l.csv'
+xgboost_config:
+  validation_figures: 'xgb_%l_%s_%t_*.png'
+  bstfile: 'rio_bst_%l_%s_%t.pkl'
+  prediction_file: 'rio_%Y%M%d_%l.csv'

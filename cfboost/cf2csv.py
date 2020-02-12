@@ -20,9 +20,10 @@ import yaml
 from multiprocessing.pool import ThreadPool
 import dask
 
+from .csv_table import write_csv
 
-def cf2csv(config_cf,config_loc,startday,endday=None,forecast=False,read_freq='1D',error_if_not_found=True,
-           resample=None,batch_write=False,write_data=True,append=False,return_data=False):
+def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=False,read_freq='1D',error_if_not_found=True,
+           resample=None,batch_write=False,write_data=True,append=False,return_data=False,**kwargs):
     '''
     Opens hourly CF files (one day at a time), reads selected variables 
     at defined locations, and writes these data into individual csv files.
@@ -76,10 +77,13 @@ def cf2csv(config_cf,config_loc,startday,endday=None,forecast=False,read_freq='1
     else:
         df_loc = None
 #---Select timestamps to be read
-    if endday is None:
-        datelist = pd.date_range(start=startday,periods=2,freq=read_freq).tolist()
-    else: 
+    if duration is not None:
+        endday = startday + dt.timedelta(hours=duration)
+    if endday is not None:
         datelist = pd.date_range(start=startday,end=endday,freq=read_freq).tolist()
+    if len(datelist)==1: 
+        datelist = [startday,None]
+    log.debug('Read dates: {}'.format(datelist))
     # By default we read all hourly files: 
     hrtoken = '*'
 #---Read data for each date
@@ -96,9 +100,9 @@ def cf2csv(config_cf,config_loc,startday,endday=None,forecast=False,read_freq='1
         dfs = _sample_files(dslist,readvars,locs,lats,lons,resample)      
         for iloc in locs:
             if batch_write or return_data:
-                df_loc[iloc] = df_loc[iloc].append(dfs.get(iloc).copy())
+                df_loc[iloc] = df_loc[iloc].append(dfs.get(iloc).copy(),sort=True)
             if write_data and not batch_write:
-                _write_file(dfs.get(iloc),ofile_template,opened_files,idate,iloc,append)
+                write_csv(dfs.get(iloc),ofile_template,opened_files,idate,iloc,append,**kwargs)
         #---Close all files
         for l in dslist:
             if dslist[l] is not None:
@@ -108,54 +112,54 @@ def cf2csv(config_cf,config_loc,startday,endday=None,forecast=False,read_freq='1
     if write_data and batch_write:
         idate = datelist[0] + ( datelist[-1]-datelist[0] ) / 2
         for iloc in locs:
-            opened_files = _write_file(df_loc[iloc],ofile_template,opened_files,idate,iloc,append)
+            opened_files = write_csv(df_loc[iloc],ofile_template,opened_files,idate,iloc,append,**kwargs)
     # All done
     t2 = time.time()
     log.info('This took {:.4f} seconds'.format(t2-t1))
     return df_loc 
 
 
-def _write_file(df,ofile_template,opened_files,idate,iloc,append=False):
-    '''Write the dataframe 'df' to a csv file.'''
-    log = logging.getLogger(__name__)
-    # File to write to
-    ofile = ofile_template.replace('%l',iloc)
-    ofile = idate.strftime(ofile)
-    # Does file exist?
-    hasfile = os.path.isfile(ofile)
-    # Determine if we need to append to existing file or if a new one shall be created. Don't write header if append to existing file. 
-    if not hasfile:
-        wm    = 'w+'
-        hdr   = True
-    # File does exist:
-    else:
-        # Has this file been previously written in this call? In this case we always need to append it. Same is true if append option is enabled
-        if ofile in opened_files or append:
-            wm  = 'a'
-            hdr = False
-        # If this is the first time this file is written and append option is disabled: 
-        else:
-            wm  = 'w+'
-            hdr = True
-    # If appending, make sure order is correct. This will also make sure that all variable names match
-    if wm == 'a':
-        file_hdr = pd.read_csv(ofile,nrows=1)
-        df = df[file_hdr.keys()]
-    else:
-        # reorder to put date and location first
-        new_hdr = ['ISO8601','year','month','day','hour','location','lat','lon']
-        old_hdr = list(df.keys())
-        for i in new_hdr:
-            old_hdr.remove(i)
-        for i in old_hdr:
-            new_hdr.append(i)
-        df = df[new_hdr]
-    # Write to file
-    df.to_csv(ofile,mode=wm,date_format='%Y-%m-%dT%H:%M:%SZ',index=False,header=hdr,na_rep='NaN')
-    log.info('Data for location {} written to {}'.format(iloc,ofile))
-    if ofile not in opened_files:
-        opened_files.append(ofile)
-    return opened_files
+#def _write_csv(df,ofile_template,opened_files,idate,iloc,append=False):
+#    '''Write the dataframe 'df' to a csv file.'''
+#    log = logging.getLogger(__name__)
+#    # File to write to
+#    ofile = ofile_template.replace('%l',iloc)
+#    ofile = idate.strftime(ofile)
+#    # Does file exist?
+#    hasfile = os.path.isfile(ofile)
+#    # Determine if we need to append to existing file or if a new one shall be created. Don't write header if append to existing file. 
+#    if not hasfile:
+#        wm    = 'w+'
+#        hdr   = True
+#    # File does exist:
+#    else:
+#        # Has this file been previously written in this call? In this case we always need to append it. Same is true if append option is enabled
+#        if ofile in opened_files or append:
+#            wm  = 'a'
+#            hdr = False
+#        # If this is the first time this file is written and append option is disabled: 
+#        else:
+#            wm  = 'w+'
+#            hdr = True
+#    # If appending, make sure order is correct. This will also make sure that all variable names match
+#    if wm == 'a':
+#        file_hdr = pd.read_csv(ofile,nrows=1)
+#        df = df[file_hdr.keys()]
+#    else:
+#        # reorder to put date and location first
+#        new_hdr = ['ISO8601','year','month','day','hour','location','lat','lon']
+#        old_hdr = list(df.keys())
+#        for i in new_hdr:
+#            old_hdr.remove(i)
+#        for i in old_hdr:
+#            new_hdr.append(i)
+#        df = df[new_hdr]
+#    # Write to file
+#    df.to_csv(ofile,mode=wm,date_format='%Y-%m-%dT%H:%M:%SZ',index=False,header=hdr,na_rep='NaN')
+#    log.info('Data for location {} written to {}'.format(iloc,ofile))
+#    if ofile not in opened_files:
+#        opened_files.append(ofile)
+#    return opened_files
 
 
 def _load_files(collections,idate,jdate=None,hrtoken='*',forecast=False,error_if_not_found=False):
@@ -165,7 +169,7 @@ def _load_files(collections,idate,jdate=None,hrtoken='*',forecast=False,error_if
     # if reading forecasts, make sure we use the correct collection. Read all forecasts at once, 
     # i.e. don't specify an enddate
     templ_key = 'template_forecast' if forecast else 'template'
-    jdate = None if forecast else jdate
+    #jdate = None if forecast else jdate
     for icol in collections.keys():
         templ = collections.get(icol).get(templ_key).replace('%c',icol)
         templ = idate.strftime(templ)
@@ -246,8 +250,8 @@ def _sample_files(dslist,readvars,locs,lats,lons,resample):
         for l in locs:
             dflist[l] = pd.merge(dflist[l],idflist[l],on='ISO8601',how='outer')
     # post-processcing
-    for l in locs:
-        df = dflist.get(l)
+    for iloc,ilat,ilon in zip(locs,lats,lons):
+        df = dflist.get(iloc)
         # eventually resample data 
         if resample is not None:
             df.index = df['ISO8601']
@@ -262,5 +266,5 @@ def _sample_files(dslist,readvars,locs,lats,lons,resample):
         df['day']      = [i.day for i in df['ISO8601']]
         df['hour']     = [i.hour for i in df['ISO8601']]
         # add this to be safe, not sure it is needed:
-        dflist[l] = df
+        dflist[iloc] = df
     return dflist

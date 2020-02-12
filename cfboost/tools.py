@@ -11,5 +11,5 @@ import logging
 
 def filename_parse(string,loc='unknown',spec='unknown',type='unknown'):
     '''Replace tokens with actual values'''
-    string.replace('%l',loc).replace('%s',spec).replace('%t',type)
+    string = string.replace('%l',loc).replace('%s',spec).replace('%t',type)
     return string

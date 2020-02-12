@@ -12,15 +12,32 @@ import os
 import pandas
 import logging
 import datetime as dt
-import cfobs.cfobs_load as cfobs_load
+from cfobs.cfobs_load import load as cfobs_load
 
 
-def obs_load(obsfile,startdate,**kwargs):
-    '''Load the observation file.'''
+def obs_load(config,obsfile=None,location=None,read_all=False,**kwargs):
+    '''Load the observation file'''
     log = logging.getLogger(__name__)
-    if not os.path.isfile(obsfile):
+#---Observation file
+    if obsfile is None:
+        obsfile = config.get('observations').get('obsfile')
+#---Eventually specify locations filter
+    if read_all:
+        locations = None
+    else:
+        locs = config.get('locations')
+        if locs is not None:
+            if location is not None:
+                locations = [locs.get(location).get('name_in_obsfile',location)]
+            else:
+                locations = [locs.get(k).get('name_in_obsfile',k) for k in locs]
+        else:
+            log.warning('No locations specified in configuration file - will read full file')
+            locations = [location]
+        obsfile = obsfile.replace('%n',locations[0])
+#---Try to read observation file
+    obs = cfobs_load(file_template=obsfile,locations_filter=locations,**kwargs)
+    if obs.shape[0] == 0:
         log.error('File does not exist: {}'.format(obsfile),exc_info=True)
         return None
-    startdate = dt.datetime(2018,1,1) if startdate is None else startday
-    obs = cfobs_load.load(file_template=obsfile,startday=startdate,**kwargs)
     return obs 
