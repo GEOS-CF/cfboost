@@ -16,6 +16,8 @@ import datetime as dt
 import pandas as pd
 import numpy as np
 
+import cfobs.units as cfobs_units
+
 from .configfile   import load_config
 from .configfile   import get_species_info
 from .configfile   import get_location_info
@@ -81,7 +83,7 @@ class CFBoost(object):
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',**kwargs):
+    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',in_ug=False,**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -110,6 +112,11 @@ class CFBoost(object):
                     prior = self._mod[lockey][speckey].values
                     pred  = prior * np.nan
                 # collect data in table
+                if in_ug and unit=='ppbv':
+                    conv = cfobs_units.get_conv_ugm3_to_ppbv(self._Xpred,temperature_name=var_T,pressure_name=var_PS,pressure_scal=100.0,mw=mw)
+                    prior = prior / conv
+                    pred  = pred  / conv
+                    unit = 'ugm-3'
                 idat[speckey+'_orig_['+unit+']'] = prior 
                 idat[speckey+'_ML_['+unit+']'  ] = pred
             # write table
@@ -237,7 +244,7 @@ class CFBoost(object):
         return
 
 
-    def _init_prediction_table(self,loc,lat,lon,var_PS,var_T,var_TPREC):
+    def _init_prediction_table(self,loc,lat,lon,var_PS,var_T,var_TPREC,scal_PS=1.0):
         '''Initialize table with model data & predictions'''
         log = logging.getLogger(__name__)
         iso8601 = self._Xpred['ISO8601']
@@ -247,7 +254,7 @@ class CFBoost(object):
         idat['Location'] = [loc for x in range(nr)] 
         idat['Lat_[degN]'] = [lat for x in range(nr)] 
         idat['Lon_[degE]'] = [lon for x in range(nr)]
-        idat = self._add_var(idat,loc,'SurfacePressure_[hPa]',var_PS,0.01)
+        idat = self._add_var(idat,loc,'SurfacePressure_[hPa]',var_PS,scal_PS)
         idat = self._add_var(idat,loc,'Temperature_[K]',var_T)
         idat = self._add_var(idat,loc,'Precipitation_[mm]',var_TPREC)
         return idat

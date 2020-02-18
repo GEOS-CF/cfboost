@@ -10,8 +10,9 @@ import pandas
 import logging
 import datetime as dt
 import numpy as np
-import cfobs.units as cfobs_units
 from sklearn.model_selection import train_test_split
+
+import cfobs.units as cfobs_units
 
 from .configfile import get_location_info
 from .configfile import get_species_info
