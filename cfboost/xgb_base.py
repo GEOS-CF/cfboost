@@ -41,7 +41,7 @@ class BoosterObj(object):
         self._validation_figures = validation_figures if validation_figures is not None else 'xgb_%k_%l_%s_%t.png'
 
 
-    def train(self,Xtrain,Ytrain,resume=True,params={'booster':'gbtree'}):
+    def train(self,Xtrain,Ytrain,resume=True,params=None):
         '''Train model'''
         log = logging.getLogger(__name__)
         Xtrain = self._check_features(Xtrain)
@@ -50,7 +50,9 @@ class BoosterObj(object):
         train = xgb.DMatrix(Xtrain,np.array(Ytrain))
         if self._bst is not None and not resume:
             self._bst = None
+        params = {'booster':'gbtree'} if params is None else params
         log.info('Training XGBoost model...')
+        log.debug('Use the folloing XGBoost parameter: {}'.format(params))
         self._bst = xgb.train(params,train,xgb_model=self._bst)
         return
 
@@ -58,6 +60,7 @@ class BoosterObj(object):
     def predict(self,Xpred):
         '''Make prediction'''
         log = logging.getLogger(__name__)
+        log.info('Make prediction for species {} at location {}'.format(self._spec,self._location))
         Xpred = self._check_features(Xpred)
         if Xpred is None:
             return None,None
@@ -108,7 +111,7 @@ class BoosterObj(object):
         m1 = min((min(orig),min(truth),min(predict)))
         m2 = max((max(orig),max(truth),max(predict)))
         mxval = max((abs(m1),abs(m2)))
-        mnval = -maxval
+        mnval = 0.0
         minval = mnval if minval is None else minval
         maxval = mxval if maxval is None else maxval
         ititle = 'Original (GEOS-CF)'
@@ -116,11 +119,11 @@ class BoosterObj(object):
         ylab   = "True concentration ["+self._unit+"]"
         axs[ii] = plot_scatter(axs[ii],orig,truth,minval,maxval,xlab,ylab,ititle)
         ii += 1
-        title = 'Adjusted (XGBoost)'
+        ititle = 'Adjusted (XGBoost)'
         axs[ii] = plot_scatter(axs[ii],predict,truth,minval,maxval,xlab,ylab,ititle)
         title = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0,0.03,1,0.95])
         ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','scatter')
         fig.savefig(ofile)
@@ -144,7 +147,7 @@ class BoosterObj(object):
         ax3    = plot_features(ax3,weight,title='Weight')
         title  = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0,0.03,1,0.95])
         ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','features')
         fig.savefig(ofile)

@@ -99,7 +99,7 @@ class CFBoost(object):
                 self.model_load( location=iloc )
             # prepare model data at this location
             lockey,locname,lat,lon = get_location_info(self._config,iloc)
-            self.prepare_prediction_data( location=lockey, drop=['location','lat','lon'] )
+            self.prepare_prediction_data( location=lockey, drop=['location','lat','lon','press_for_unit','temp_for_unit'] )
             idat = self._init_prediction_table(lockey,lat,lon,var_PS,var_T,var_TPREC)
             # make prediction for each species, collect and write to file
             for ispec in species:
@@ -179,7 +179,8 @@ class CFBoost(object):
     def bst_train_and_validate(self,species=None,location=None):
         '''Train the model'''
         bst = self.bst_get(species,location)
-        bst.train(self._Xtrain,self._Ytrain)
+        params = self._read_config('xgboost_params')
+        bst.train(self._Xtrain,self._Ytrain,params=params)
         bst.validate(self._Xvalid,self._Yvalid)
         return
 
@@ -192,6 +193,21 @@ class CFBoost(object):
         else:
             prior=None; Ypred=None
         return prior,Ypred
+
+
+    def bst_get(self,species=None,location=None,bstfile=None,load_if_not_found=True):
+        '''Return the booster object for the given species and location'''
+        log = logging.getLogger(__name__)
+        if bstfile is None:
+            bstfile = self._get_bstfile(location=location,species=species)
+        if bstfile not in self._bstobj and load_if_not_found:
+            self.bst_load(bstfile=bstfile,not_found_ok=True)
+        if bstfile not in self._bstobj:
+            log.warning('booster object not found - return empty object: {}'.format(bstfile))
+            bst = None
+        else:
+            bst = self._bstobj[bstfile]
+        return bst
 
 
     def bst_save(self,species=None,location=None,bstfile=None):
@@ -256,21 +272,6 @@ class CFBoost(object):
             log.warning('booster object already exists in memory, will be overwritten: {}'.format(bstfile))
         self._bstobj[bstfile] = bst
         return
-
-
-    def bst_get(self,species=None,location=None,bstfile=None,load_if_not_found=True):
-        '''Return the booster object for the given species and location'''
-        log = logging.getLogger(__name__)
-        if bstfile is None:
-            bstfile = self._get_bstfile(location=location,species=species)
-        if bstfile not in self._bstobj and load_if_not_found:
-            self.bst_load(bstfile=bstfile,not_found_ok=True)
-        if bstfile not in self._bstobj:
-            log.warning('booster object not found - return empty object: {}'.format(bstfile))
-            bst = None
-        else:
-            bst = self._bstobj[bstfile]
-        return bst
 
 
     def _get_bstfile(self, location, species):
