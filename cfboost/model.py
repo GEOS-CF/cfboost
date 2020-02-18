@@ -70,13 +70,22 @@ def _check_vars(mod,config_cf):
     # pass model variables
     collections = config_cf.get('collections')
     for col in collections.keys():
+        skip = collections.get(col).get('skip_in_model',False)
+        if skip:
+            log.debug('Skip collection {}'.format(col))
+            continue
         vars = collections.get(col).get('vars')
         for var in vars:
-            ivar = vars.get(var).get('name_on_file',var) 
+            skip = vars.get(var).get('skip_in_model',False)
+            if skip:
+                log.debug('Skip variable {}'.format(var))
+                continue
+            ivar = vars.get(var).get('name_in_file',var) 
             scal = vars.get(var).get('scal',1.0)
             if ivar not in mod.keys():
                 log.error('Variable not found in CF file: {}'.format(ivar),exc_info=True)
                 return None
+            log.debug('Read variable {} into field {}, use scale factor {}'.format(ivar,var,scal))
             mod_out[var] = mod[ivar].values*scal
     del mod
     return mod_out
