@@ -21,10 +21,11 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,drop=['location','lat','lon'],round_minutes=True,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
+    obs_location_key = config.get('observations').get('obs_location_key','original_station_name')
     location_key, location_name_in_obsfile, location_lat, location_lon = get_location_info(config,location)
 #---(target) species settings
     species_key, species_name_in_obsfile, species_mw, prediction_type, prediction_unit = get_species_info(config,species)
@@ -33,7 +34,7 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     log.info('--> Location: {} ({:} degN, {:} degE; name in obsfile: {})'.format(location_key,location_lat,location_lon,location_name_in_obsfile))
     log.info('--> Species: {}; Species name in obsfile: {}; MW: {}; Prediction unit: {}; Prediction type: {}'.format(species_key,species_name_in_obsfile,species_mw,prediction_unit,prediction_type))
 #---observation data
-    obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=0.0) & (~np.isnan(obs['value'])) & (obs['location']==location_name_in_obsfile)].copy()
+    obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=0.0) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
     if check_latlon:
         laterr,lonerr = _latlon_check(obs_reduced,location_lat,location_lon)
         if laterr or lonerr:
@@ -43,11 +44,15 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         obs_reduced['ISO8601'] = [dt.datetime(i.year,i.month,i.day,i.hour,0,0) for i in obs_reduced['ISO8601']]
     log.debug('Shape of obs_reduced: {}'.format(obs_reduced.shape))
 #---model data
-    if 'ISO8601' in drop:
-        drop.remove('ISO8601')
+    if 'ISO8601' in mod_drop:
+        mod_drop.remove('ISO8601')
+    if 'temp_for_unit' in mod_drop:
+        mod_drop.remove('temp_for_unit')
+    if 'press_for_unit' in mod_drop:
+        mod_drop.remove('press_for_unit')
     mod_reduced = prepare_prediction_data(mod,config,location=None,location_name=location_key,
                   location_lat=location_lat,location_lon=location_lon,check_latlon=check_latlon,
-                  drop=drop,round_minutes=round_minutes)
+                  drop=mod_drop,round_minutes=round_minutes)
     log.debug('Shape of mod_reduced: {}'.format(mod_reduced.shape))
 #---reduce to overlapping dates
     dates = list(set(mod_reduced['ISO8601']).intersection(obs_reduced['ISO8601']))
@@ -67,13 +72,18 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         log.debug('After calculating bias: {}'.format(np.mean(obs_reduced['value'])))
 #---split data
     predicted_values = np.array(obs_reduced['value'].values)
-    _ = mod_reduced.pop('ISO8601')
+    if 'ISO8601' in mod_reduced.keys():
+        _ = mod_reduced.pop('ISO8601')
+    if 'press_for_unit' in mod_reduced.keys():
+        _ = mod_reduced.pop('press_for_unit')
+    if 'temp_for_unit' in mod_reduced.keys():
+        _ = mod_reduced.pop('temp_for_unit')
     Xtrain,Xvalid,Ytrain,Yvalid = train_test_split( mod_reduced, predicted_values, **kwargs )
     return Xtrain, Xvalid, Ytrain, Yvalid
 
 
 def prepare_prediction_data(mod,config,location=None,location_name=None,location_lat=None,
-                            location_lon=None,check_latlon=False,drop=['location','lat','lon'],
+                            location_lon=None,check_latlon=False,drop=['location','lat','lon','press_for_unit','temp_for_unit'],
                             round_minutes=True):
     '''Prepare model data for model prediction'''
     log = logging.getLogger(__name__)
@@ -96,7 +106,7 @@ def prepare_prediction_data(mod,config,location=None,location_name=None,location
     return mod_reduced 
 
 
-def _convert2ppbv(obs,mod,mw,temp_name='t10m',ps_name='ps'):
+def _convert2ppbv(obs,mod,mw,temp_name='temp_for_unit',ps_name='press_for_unit'):
     '''Convert observations to ppbv'''
     log = logging.getLogger(__name__)
     log.debug('Before unit conversion: {}'.format(np.mean(obs['value'].values)))
