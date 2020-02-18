@@ -54,15 +54,27 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         ofile_template = 'cf_%l.csv'
         log.warning('No template for output file found - will use default {}'.format(ofile_template))
     opened_files = []
-    # for convenience, prestore list of variables to be read for every collection
+    # for convenience, prestore list of collections and variables to be read for every collection
+    templ_key = 'template_forecast' if forecast else 'template'
+    readcols = dict()
     readvars = dict()
     collections = config_cf.get('collections')
     for icol in collections.keys():
+        templ = collections.get(icol).get(templ_key)
+        if templ is None:
+            log.error('Template for collection {} not found, was looking for template key {}'.format(icol,templ_key),exc_info=True)
+            return None
+        if templ == 'skip' :
+            log.debug('Will skip collection {} because template key {} set to value "skip"'.format(icol,templ_key))
+            continue
         var_list = []
         vars = collections.get(icol).get('vars')
         for ivar in vars.keys():
-            var_list.append(vars.get(ivar).get('name_on_file',ivar))
+            tvar = vars.get(ivar).get('name_in_file',ivar)
+            if tvar not in var_list:
+                var_list.append(tvar)
         readvars[icol] = var_list
+        readcols[icol] = templ
     # also create lists of location names, latitudes and longitudes
     locs=[]; lons=[]; lats=[]
     for iloc in config_loc.keys():
@@ -77,11 +89,12 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
     else:
         df_loc = None
 #---Select timestamps to be read
+    datelist = []
     if duration is not None:
         endday = startday + dt.timedelta(hours=duration)
     if endday is not None:
         datelist = pd.date_range(start=startday,end=endday,freq=read_freq).tolist()
-    if len(datelist)==1: 
+    if len(datelist)<2:
         datelist = [startday,None]
     log.debug('Read dates: {}'.format(datelist))
     # By default we read all hourly files: 
@@ -95,7 +108,7 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
             hrtoken = str(idate.hour).zfill(2)
         log.info('working on '+idate.strftime('%Y-%m-%d %H:%M'))
         #---Load collections for this day 
-        dslist = _load_files(collections,idate,jdate,hrtoken,forecast,error_if_not_found)
+        dslist = _load_files(readcols,idate,jdate,hrtoken,error_if_not_found)
         #---Read data for every location
         dfs = _sample_files(dslist,readvars,locs,lats,lons,resample)      
         for iloc in locs:
@@ -119,61 +132,15 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
     return df_loc 
 
 
-#def _write_csv(df,ofile_template,opened_files,idate,iloc,append=False):
-#    '''Write the dataframe 'df' to a csv file.'''
-#    log = logging.getLogger(__name__)
-#    # File to write to
-#    ofile = ofile_template.replace('%l',iloc)
-#    ofile = idate.strftime(ofile)
-#    # Does file exist?
-#    hasfile = os.path.isfile(ofile)
-#    # Determine if we need to append to existing file or if a new one shall be created. Don't write header if append to existing file. 
-#    if not hasfile:
-#        wm    = 'w+'
-#        hdr   = True
-#    # File does exist:
-#    else:
-#        # Has this file been previously written in this call? In this case we always need to append it. Same is true if append option is enabled
-#        if ofile in opened_files or append:
-#            wm  = 'a'
-#            hdr = False
-#        # If this is the first time this file is written and append option is disabled: 
-#        else:
-#            wm  = 'w+'
-#            hdr = True
-#    # If appending, make sure order is correct. This will also make sure that all variable names match
-#    if wm == 'a':
-#        file_hdr = pd.read_csv(ofile,nrows=1)
-#        df = df[file_hdr.keys()]
-#    else:
-#        # reorder to put date and location first
-#        new_hdr = ['ISO8601','year','month','day','hour','location','lat','lon']
-#        old_hdr = list(df.keys())
-#        for i in new_hdr:
-#            old_hdr.remove(i)
-#        for i in old_hdr:
-#            new_hdr.append(i)
-#        df = df[new_hdr]
-#    # Write to file
-#    df.to_csv(ofile,mode=wm,date_format='%Y-%m-%dT%H:%M:%SZ',index=False,header=hdr,na_rep='NaN')
-#    log.info('Data for location {} written to {}'.format(iloc,ofile))
-#    if ofile not in opened_files:
-#        opened_files.append(ofile)
-#    return opened_files
-
-
-def _load_files(collections,idate,jdate=None,hrtoken='*',forecast=False,error_if_not_found=False):
+def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
     '''Loads all files into memory for a given date.'''
     log = logging.getLogger(__name__)
     dslist = dict() 
-    # if reading forecasts, make sure we use the correct collection. Read all forecasts at once, 
-    # i.e. don't specify an enddate
-    templ_key = 'template_forecast' if forecast else 'template'
-    #jdate = None if forecast else jdate
-    for icol in collections.keys():
-        templ = collections.get(icol).get(templ_key).replace('%c',icol)
-        templ = idate.strftime(templ)
-        log.info('reading {}'.format(templ))
+    # if reading forecasts, make sure we use the correct collection.
+    for icol in readcols:
+        templ = readcols.get(icol)
+        templ = idate.strftime(templ.replace('%c',icol))
+        log.info('Reading {}'.format(templ))
         if 'opendap.nccs.nasa.gov' in templ:
             try: 
                 ds = xr.open_dataset(templ)
@@ -181,7 +148,7 @@ def _load_files(collections,idate,jdate=None,hrtoken='*',forecast=False,error_if
                     ds = ds.sel(time=slice(idate,jdate))
             except:
                 if error_if_not_found:
-                    log.error('Error: could not read {}'.format(templ),exc_info=True)
+                    log.error('Could not read {}'.format(templ),exc_info=True)
                 else:
                     log.warning('Error reading file - will will with NaNs: {}'.format(templ))
                     ds = None
@@ -190,7 +157,7 @@ def _load_files(collections,idate,jdate=None,hrtoken='*',forecast=False,error_if
                 ds = xr.open_mfdataset(templ) 
             except:
                 if error_if_not_found:
-                    log.error('Error: could not read {}'.format(templ),exc_info=True)
+                    log.error('Could not read {}'.format(templ),exc_info=True)
                 else:
                     log.warning('Error reading file - will will with NaNs: {}'.format(templ))
                     ds = None
