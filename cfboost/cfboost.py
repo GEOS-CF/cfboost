@@ -17,6 +17,7 @@ import pandas as pd
 import numpy as np
 
 import cfobs.units as cfobs_units
+from cfobs.systools import check_dir as check_dir
 
 from .configfile   import load_config
 from .configfile   import get_species_info
@@ -52,6 +53,18 @@ class CFBoost(object):
     def load_config(self, configfile):
         '''Load overall configuration file and the CF configuration file.'''
         self._config = load_config(configfile=configfile)
+        # read locations
+        locs = self._config.get('locations_config')
+        if locs is not None:
+            loc_info = {}
+            for iloc in locs:
+                locconfigfile = locs.get(iloc)
+                if not os.path.isfile(locconfigfile):
+                    locconfigfile = '/'.join(configfile.split('/')[0:-1])+'/'+locconfigfile
+                ilocs = load_config(configfile=locconfigfile)
+                for k,v in ilocs.items():
+                    loc_info[k] = v 
+            self._config['locations'] = loc_info
         # read CF configuration
         cf = self._read_config('model')
         cfconfigfile = self._read_config('config',config=cf)
@@ -220,9 +233,11 @@ class CFBoost(object):
     def bst_save(self,species=None,location=None,bstfile=None):
         '''Save the booster object to disk'''
         log = logging.getLogger(__name__)
+        dummy_date = dt.datetime(2018,1,1)
         bst = self.bst_get(species,location)
         if bst is not None:
             bstfile = bst._bstfile if bstfile is None else bstfile
+            check_dir(bstfile,dummy_date)
             pickle.dump(bst, open(bst._bstfile, "wb"))
         log.info('Booster object written to {}'.format(bstfile))
         return

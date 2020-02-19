@@ -14,6 +14,7 @@ import datetime as dt
 import os
 import pandas as pd
 
+from cfobs.systools import check_dir as check_dir
 
 def write_csv(df,ofile_template,opened_files,idate,iloc,append=False,hdr_start=None,**kwargs):
     '''Write the dataframe 'df' to a csv file.'''
@@ -21,6 +22,8 @@ def write_csv(df,ofile_template,opened_files,idate,iloc,append=False,hdr_start=N
     # File to write to
     ofile = ofile_template.replace('%l',iloc)
     ofile = idate.strftime(ofile)
+    # Check for directory
+    check_dir(ofile,idate)
     # Does file exist?
     hasfile = os.path.isfile(ofile)
     # Determine if we need to append to existing file or if a new one shall be created. Don't write header if append to existing file. 

@@ -13,11 +13,14 @@ import numpy as np
 import pickle 
 import xgboost as xgb
 import logging
+import datetime as dt
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 from scipy import stats 
+
+from cfobs.systools import check_dir as check_dir
 
 from .tools import filename_parse
 
@@ -93,6 +96,7 @@ class BoosterObj(object):
     def make_scatter_plot(self,orig,predict,truth,title="Scatter plot %s at %l",minval=None,maxval=None):
         '''Make scatter plot and save figure'''
         log = logging.getLogger(__name__)       
+        idate = dt.datetime(2018,1,1)
         nfig = 3 if self._type == 'bias' else 2
         fig, axs = plt.subplots(1,nfig,figsize=(nfig*5,5))
         ii = 0
@@ -126,6 +130,7 @@ class BoosterObj(object):
         plt.tight_layout(rect=[0,0.03,1,0.95])
         ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','scatter')
+        check_dir(ofile,idate)
         fig.savefig(ofile)
         log.info('Scatter plot written to {}'.format(ofile))
         plt.close()
@@ -135,6 +140,7 @@ class BoosterObj(object):
     def make_features_plot(self,title="Feature importances (%s)"):
         '''Make features plot and save figure'''
         log = logging.getLogger(__name__)       
+        idate = dt.datetime(2018,1,1)
         fig = plt.figure(figsize=(12,4))
         gain   = self._bst.get_score(importance_type='gain')
         cover  = self._bst.get_score(importance_type='cover')
@@ -150,6 +156,7 @@ class BoosterObj(object):
         plt.tight_layout(rect=[0,0.03,1,0.95])
         ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
         ofile = ofile.replace('*','features')
+        check_dir(ofile,idate)
         fig.savefig(ofile)
         log.info('Scatter plot written to {}'.format(ofile))
         plt.close()
