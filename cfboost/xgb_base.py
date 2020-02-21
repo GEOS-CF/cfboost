@@ -106,11 +106,11 @@ class BoosterObj(object):
             y = truth-orig
             m1 = min((min(x),min(y)))
             m2 = max((max(x),max(y)))
-            maxval = max((abs(m1),abs(m2)))
-            minval = -maxval
+            imaxval = max((abs(m1),abs(m2)))
+            iminval = -imaxval
             xlab   = "Predicted bias ["+self._unit+"]"
             ylab   = "True bias ["+self._unit+"]"
-            axs[ii] = plot_scatter(axs[ii],x,y,minval,maxval,xlab,ylab,ititle)
+            axs[ii] = plot_scatter(axs[ii],x,y,iminval,imaxval,xlab,ylab,ititle)
             ii += 1
         m1 = min((min(orig),min(truth),min(predict)))
         m2 = max((max(orig),max(truth),max(predict)))
