@@ -27,7 +27,7 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     log = logging.getLogger(__name__)
 #---location settings
     obs_location_key = config.get('observations').get('obs_location_key','original_station_name')
-    location_key, location_name_in_obsfile, location_lat, location_lon = get_location_info(config,location)
+    location_key, location_name_in_obsfile, location_lat, location_lon, region_name = get_location_info(config,location)
 #---(target) species settings
     species_key, species_name_in_obsfile, species_mw, prediction_type, prediction_unit = get_species_info(config,species)
 #---verbose
@@ -90,7 +90,7 @@ def prepare_prediction_data(mod,config,location=None,location_name=None,location
     log = logging.getLogger(__name__)
 #---location settings
     if location_name is None:
-        location_name, location_name_in_obsfile, location_lat, location_lot = get_location_info(config,location)
+        location_name, location_name_in_obsfile, location_lat, location_lot, region_name = get_location_info(config,location)
 #---prepare model data
     mod_reduced = mod.loc[mod['location']==location_name].copy()
     if check_latlon:

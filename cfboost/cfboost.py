@@ -63,6 +63,7 @@ class CFBoost(object):
                     locconfigfile = '/'.join(configfile.split('/')[0:-1])+'/'+locconfigfile
                 ilocs = load_config(configfile=locconfigfile)
                 for k,v in ilocs.items():
+                    v['region_name'] = iloc
                     loc_info[k] = v 
             self._config['locations'] = loc_info
         # read CF configuration
@@ -113,7 +114,7 @@ class CFBoost(object):
             if not read_netcdf:
                 self.model_load( location=iloc )
             # prepare model data at this location
-            lockey,locname,lat,lon = get_location_info(self._config,iloc)
+            lockey,locname,lat,lon,region = get_location_info(self._config,iloc)
             self.prepare_prediction_data( location=lockey, drop=['location','lat','lon','press_for_unit','temp_for_unit'] )
             idat = self._init_prediction_table(lockey,lat,lon,var_PS,var_T,var_TPREC)
             # make prediction for each species, collect and write to file
@@ -133,7 +134,8 @@ class CFBoost(object):
                 idat[speckey+'_orig_['+unit+']'] = prior 
                 idat[speckey+'_ML_['+unit+']'  ] = pred
             # write table
-            opened_files = write_csv(df=idat,ofile_template=ofile_template,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f')
+            itemplate = ofile_template.replace('%r',region)
+            opened_files = write_csv(df=idat,ofile_template=itemplate,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f')
         return
 
 
@@ -186,7 +188,7 @@ class CFBoost(object):
         if os.path.exists(bstfile) and read_if_exists:
             self.bst_load(bstfile=bstfile)
         else:
-            lockey,locname,lat,lon  = get_location_info(self._config,location)
+            lockey,locname,lat,lon,region = get_location_info(self._config,location)
             speckey,specname,mw,type,unit = get_species_info(self._config,species)
             xgbconfig = self._read_config('xgboost_config')
             validation_figures = self._read_config('validation_figures',config=xgbconfig)
@@ -298,7 +300,7 @@ class CFBoost(object):
 
     def _get_bstfile(self, location, species):
         '''Return the booster object filename'''
-        lockey,locname,lat,lon  = get_location_info(self._config,location)
+        lockey,locname,lat,lon,region = get_location_info(self._config,location)
         speckey,specname,mw,type,unit = get_species_info(self._config,species)
         xgbconfig = self._read_config('xgboost_config')
         bstfile = self._read_config('bstfile',config=xgbconfig,default='bst_%l_%s_%t.pkl')

@@ -40,7 +40,8 @@ def get_location_info(config,location_key=None):
     name = location.get('name_in_obsfile',location_key)
     lat  = location.get('lat',np.nan)
     lon  = location.get('lon',np.nan)
-    return location_key,name,lat,lon    
+    region = location.get('region_name',location_key)
+    return location_key,name,lat,lon,region
 
 
 def get_species_info(config,species):
