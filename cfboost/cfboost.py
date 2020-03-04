@@ -35,8 +35,14 @@ from .csv_table    import write_csv
 
 class CFBoost(object):
     '''
-    Bias correction of GEOS-CF (surface) output using surface observations and
-    the XGBoost algorithm.
+    Class for bias corrector model of GEOS-CF (surface) output, comparing it against
+    surface observations and identifying model-observation mismatches using the XGBoost
+    machine learning algorithm. 
+
+    Arguments
+    ---------
+    configfile: str
+        Configuration file
     '''
     def __init__(self, configfile):
         self._config     = None
@@ -51,7 +57,7 @@ class CFBoost(object):
 
 
     def load_config(self, configfile):
-        '''Load overall configuration file and the CF configuration file.'''
+        '''Load overall configuration file, including the CF configuration file.'''
         self._config = load_config(configfile=configfile)
         # read locations
         locs = self._config.get('locations_config')
@@ -116,7 +122,8 @@ class CFBoost(object):
             # prepare model data at this location
             lockey,locname,lat,lon,region = get_location_info(self._config,iloc)
             self.prepare_prediction_data( location=lockey, drop=['location','lat','lon','press_for_unit','temp_for_unit'] )
-            idat = self._init_prediction_table(lockey,lat,lon,var_PS,var_T,var_TPREC)
+            initdate = None if startday is None else dt.datetime(startday.year,startday.month,startday.day,12,0,0)
+            idat = self._init_prediction_table(initdate,lockey,lat,lon,var_PS,var_T,var_TPREC)
             # make prediction for each species, collect and write to file
             for ispec in species:
                 speckey,specname,mw,type,unit = get_species_info(self._config,ispec)
@@ -261,13 +268,15 @@ class CFBoost(object):
         return
 
 
-    def _init_prediction_table(self,loc,lat,lon,var_PS,var_T,var_TPREC,scal_PS=1.0):
+    def _init_prediction_table(self,initdate,loc,lat,lon,var_PS,var_T,var_TPREC,scal_PS=1.0):
         '''Initialize table with model data & predictions'''
         log = logging.getLogger(__name__)
         iso8601 = self._Xpred['ISO8601']
         nr = len(iso8601)
         idat = pd.DataFrame()
         idat['ISO8601']  = iso8601
+        if initdate is not None:
+            idat['Initialization_Date'] = [initdate for x in range(nr)]
         idat['Location'] = [loc for x in range(nr)] 
         idat['Lat_[degN]'] = [lat for x in range(nr)] 
         idat['Lon_[degE]'] = [lon for x in range(nr)]

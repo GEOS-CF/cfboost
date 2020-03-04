@@ -23,29 +23,45 @@ import dask
 from .csv_table import write_csv
 
 def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=False,read_freq='1D',error_if_not_found=True,
-           resample=None,batch_write=False,write_data=True,append=False,return_data=False,**kwargs):
+           resample=None,write_data=True,batch_write=False,append=False,return_data=False,**kwargs):
     '''
-    Opens hourly CF files (one day at a time), reads selected variables 
-    at defined locations, and writes these data into individual csv files.
-    The files and variables as well as the locations to be read are defined in two
-    YAML files (passed through the argument list). 
-    Supports reading files locally (e.g., on Discover) or remotely via OpenDAP.
+    Open GEOS-CF data, read selected variables at given locations, and write them to a pandas data frame.
+    The file and variable information, as well as the location information, must be provided through dictionaries.
+    This routine supports reading files locally (e.g., directly from local netCDF files) or remotely via OpenDAP.
 
-    p.add_argument('-f','--files',type=str,help='yaml file with file information',default='config/cf2csv_files_opendap.yml')
-    p.add_argument('-l','--locs',type=str,help='yaml file with location information',default='config/cf2csv_locations.yml')
-    p.add_argument('-o','--ofile',type=str,help='output file. Use token %s for station name',default='csv/GEOS-CF.v01.rpl.tavg_1hr_%s.csv')
-    p.add_argument('-a','--append',type=int,help='append to existing file (0=no, 1=yes)',default=0)
-    p.add_argument('-y1','--year1',type=int,help='start year',default=2018) 
-    p.add_argument('-y2','--year2',type=int,help='end year',default=None) 
-    p.add_argument('-m1','--month1',type=int,help='start month', default=1) 
-    p.add_argument('-m2','--month2',type=int,help='end month', default=None) 
-    p.add_argument('-d1','--day1',type=int,help='start day', default=1) 
-    p.add_argument('-d2','--day2',type=int,help='end day', default=None)
-    p.add_argument('-r','--resample',type=str,help='resample method, will be used with pandas.resample(XXX). For instance, use `D` for daily averages', default=None)
-    p.add_argument('-e','--error-if-not-found',type=int,help='raise error and stop script if file not found (1=yes, 0=no)', default=0)
-    p.add_argument('-rf','--read-freq',type=str,help='frequency string for sifting through the files. For example, if using `1D` the files will be read day by day',default='1D')
-    p.add_argument('-b','--batch-write',type=int,help='if set to 1, will write out everything at the end. Otherwise, data will be written out continuously',default=0)
+    Arguments
+    ---------
+    config_cf: dict
+        model configuration (model output collections and variables to be read).
+    config_loc: dict
+        location configuration (locations to be sampled).
+    startday: dt.datetime
+        sampling start day.
+    endday: dt.datetime
+        sampling end day.
+    duration: 
+        sampling duration, in hours from startday. If specified, overwrites endday.
+    forecast: bool
+        read forecast collections?
+    read_freq: str
+        frequency string for sifting through the data. For example, if using '1D' the files will be processed in batches of one day.
+    error_if_not_found: bool
+        raise error and stop script if file not found.
+    resample: str
+        resampling method, to be used with pandas.resample(). For instance, use 'D' to generate daily averages.
+    write_data: bool
+        write data to csv file?
+    batch_write: bool
+        if true, will write out the entire data at the end. Otherwise, the data will be written out as the batches are being read.
+    append: bool
+        append data that is written out to an existing file?
+    return_data: bool
+        if True, the batch data will be accumulated in a 'master' data frame that is returned at the end. If False, the batch data
+        will be tossed after writing it and None is returned. 
+    **kwargs: dict
+        additional arguments passed to write_csv
     '''
+
     log = logging.getLogger(__name__)
     dask.config.set(pool=ThreadPool(10))
 #---Setup
@@ -167,7 +183,7 @@ def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
 
 def _sample_files(dslist,readvars,locs,lats,lons,resample):
     '''
-    Sample the previously opened files (--> dslist) at location ilat, ilon. 
+    Sample the previously opened files (--> dslist) at given locations. 
     '''
     log = logging.getLogger(__name__)
     # Create output data frame, set 'meta data' 
