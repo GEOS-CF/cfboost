@@ -103,7 +103,7 @@ class CFBoost(object):
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',in_ug=False,**kwargs):
+    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -123,7 +123,7 @@ class CFBoost(object):
             lockey,locname,lat,lon,region = get_location_info(self._config,iloc)
             self.prepare_prediction_data( location=lockey, drop=['location','lat','lon','press_for_unit','temp_for_unit'] )
             initdate = None if startday is None else dt.datetime(startday.year,startday.month,startday.day,12,0,0)
-            idat = self._init_prediction_table(initdate,lockey,lat,lon,var_PS,var_T,var_TPREC)
+            idat = self._init_prediction_table(initdate,lockey,lat,lon,var_PS,var_T,var_TPREC,var_U,var_V)
             # make prediction for each species, collect and write to file
             for ispec in species:
                 speckey,specname,mw,type,unit = get_species_info(self._config,ispec)
@@ -268,7 +268,7 @@ class CFBoost(object):
         return
 
 
-    def _init_prediction_table(self,initdate,loc,lat,lon,var_PS,var_T,var_TPREC,scal_PS=1.0):
+    def _init_prediction_table(self,initdate,loc,lat,lon,var_PS,var_T,var_TPREC,var_U,var_V,scal_PS=1.0):
         '''Initialize table with model data & predictions'''
         log = logging.getLogger(__name__)
         iso8601 = self._Xpred['ISO8601']
@@ -283,6 +283,8 @@ class CFBoost(object):
         idat = self._add_var(idat,loc,'SurfacePressure_[hPa]',var_PS,scal_PS)
         idat = self._add_var(idat,loc,'Temperature_[K]',var_T)
         idat = self._add_var(idat,loc,'Precipitation_[mm]',var_TPREC)
+        idat = self._add_var(idat,loc,'Eastward_wind_[ms-1]',var_U)
+        idat = self._add_var(idat,loc,'Northward_wind_[ms-1]',var_V)
         return idat
 
 
