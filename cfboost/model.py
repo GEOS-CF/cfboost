@@ -70,13 +70,13 @@ def _check_vars(mod,config_cf):
     # pass model variables
     collections = config_cf.get('collections')
     for col in collections.keys():
-        skip = collections.get(col).get('skip_in_model',False)
+        skip = collections.get(col).get('skip_for_ml',False)
         if skip:
             log.debug('Skip collection {}'.format(col))
             continue
         vars = collections.get(col).get('vars')
         for var in vars:
-            skip = vars.get(var).get('skip_in_model',False)
+            skip = vars.get(var).get('skip_for_ml',False)
             if skip:
                 log.debug('Skip variable {}'.format(var))
                 continue
