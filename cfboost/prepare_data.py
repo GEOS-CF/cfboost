@@ -10,6 +10,7 @@ import pandas
 import logging
 import datetime as dt
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 import cfobs.units as cfobs_units
@@ -65,7 +66,8 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
 #---convert units if needed
     if prediction_unit == 'ppbv':
         obs_reduced = _convert2ppbv(obs_reduced,mod_reduced,species_mw)
-    obs_reduced = obs_reduced.groupby('ISO8601').sum().reset_index()
+    #obs_reduced = obs_reduced.groupby('ISO8601').sum().reset_index()
+    obs_reduced = obs_reduced.groupby('ISO8601').mean().reset_index()
     log.debug('After grouping: {}'.format(np.mean(obs_reduced['value'])))
 #---extract prediction values, convert to bias if needed
     if prediction_type == 'bias':
@@ -122,9 +124,12 @@ def _convert2ppbv(obs,mod,mw,temp_name='temp_for_unit',ps_name='press_for_unit')
             return None
         # Calculate conversion factor for selected dates
         dates = obs.loc[idx,'ISO8601']
-        imod  = mod.loc[mod['ISO8601'].isin(dates),['ISO8601',temp_name,ps_name]].sort_values(by='ISO8601')
-        conv = cfobs_units.get_conv_ugm3_to_ppbv(imod,temperature_name=temp_name,pressure_name=ps_name,mw=mw)
-        obs.loc[idx,'value'] = np.array(obs.loc[idx,'value'].values*conv)
+        imod  = mod.loc[mod['ISO8601'].isin(dates),['ISO8601',temp_name,ps_name]].sort_values(by='ISO8601').copy()
+        imod['conv'] = cfobs_units.get_conv_ugm3_to_ppbv(imod,temperature_name=temp_name,pressure_name=ps_name,mw=mw)
+        tmp = pd.DataFrame()
+        tmp['ISO8601'] = obs['ISO8601']
+        tmp = tmp.merge(imod)
+        obs.loc[idx,'value'] = np.array(obs.loc[idx,'value'].values*tmp['conv'].values)
         log.debug('Converted ugm-3 to ppbv for {:} values'.format(len(idx)))
 #---ppmv to ppbv:
     idx = obs.index[obs['unit']=='ppmv']
