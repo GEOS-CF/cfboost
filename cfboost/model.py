@@ -29,7 +29,7 @@ def model_load(config_cf,location='',error_if_missing=True,**kwargs):
         ofile_template = 'cf_%l.csv'
         log.warning('No template for output file found - will use default {}'.format(ofile_template))
     modfile = filename_parse(ofile_template,loc=location)
-    mod = cfobs_load(file_template=modfile,**kwargs)
+    mod, _, _ = cfobs_load(file_template=modfile,**kwargs)
     if mod.shape[0] == 0:
         if error_if_missing:
             log.error('File does not exist: {}'.format(modfile),exc_info=True)

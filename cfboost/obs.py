@@ -39,7 +39,8 @@ def obs_load(config,obsfile=None,location=None,read_all=False,**kwargs):
     if locations is not None:
         obs_location_key = config.get('observations').get('obs_location_key','original_station_name')
         locations_filter = {obs_location_key: locations}
-    obs = cfobs_load(file_template=obsfile,filter=locations_filter,**kwargs)
+    obs, _, _ = cfobs_load(file_template=obsfile,filter=locations_filter,**kwargs)
+    log.debug('Obs : {}'.format(obs))
     if obs.shape[0] == 0:
         log.error('File does not exist: {}'.format(obsfile),exc_info=True)
         return None
