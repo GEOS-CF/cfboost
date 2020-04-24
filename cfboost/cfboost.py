@@ -18,6 +18,7 @@ import numpy as np
 
 import cfobs.units as cfobs_units
 from cfobs.systools import check_dir as check_dir
+from cfobs.table_of_stations import write_locations_to_yaml as write_locations_to_yaml
 
 from .configfile   import load_config
 from .configfile   import get_species_info
@@ -325,3 +326,8 @@ class CFBoost(object):
         val = config.get(key,default)
         assert(val is not None),'keyword '+key+' not found in configuration file: '+self._configfile
         return val
+
+
+    def write_locations_to_yaml(self, **kwargs):
+        '''Write all unique location information to a YAML file'''
+        write_locations_to_yaml(self._obs,**kwargs)
