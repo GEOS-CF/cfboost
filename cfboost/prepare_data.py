@@ -23,7 +23,7 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -54,7 +54,7 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         mod_drop.remove('press_for_unit')
     mod_reduced = prepare_prediction_data(mod,config,location=None,location_name=location_key,
                   location_lat=location_lat,location_lon=location_lon,check_latlon=check_latlon,
-                  drop=mod_drop,round_minutes=round_minutes)
+                  drop=mod_drop,round_minutes=round_minutes,trendday=trendday)
     log.debug('Shape of mod_reduced: {}'.format(mod_reduced.shape))
 #---reduce to overlapping dates
     dates = list(set(mod_reduced['ISO8601']).intersection(obs_reduced['ISO8601']))
@@ -87,7 +87,7 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
 
 def prepare_prediction_data(mod,config,location=None,location_name=None,location_lat=None,
                             location_lon=None,check_latlon=False,drop=['location','lat','lon','press_for_unit','temp_for_unit'],
-                            round_minutes=True):
+                            round_minutes=True,trendday=None):
     '''Prepare model data for model prediction'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -104,6 +104,9 @@ def prepare_prediction_data(mod,config,location=None,location_name=None,location
         mod_reduced['ISO8601'] = [dt.datetime(i.year,i.month,i.day,i.hour,0,0) for i in mod_reduced['ISO8601']]
     mod_reduced = mod_reduced.groupby('ISO8601').sum().reset_index()
     mod_reduced['Hour'] = [i.hour for i in mod_reduced['ISO8601']]
+    mod_reduced['Weekday'] = [i.weekday() for i in mod_reduced['ISO8601']]
+    if trendday is not None:
+        mod_reduced['Trendday'] = [(i-trendday).days for i in mod_reduced['ISO8601']]
 #---eventually drop values
     _ = [mod_reduced.pop(var) for var in drop if var in mod_reduced.keys()]
     return mod_reduced 
