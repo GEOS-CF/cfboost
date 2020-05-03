@@ -29,12 +29,14 @@ class BoosterObj(object):
     '''
     Booster object. 
     '''
-    def __init__(self,bstfile,cfconfig,spec,mw,type,unit,location,lat,lon,validation_figures=None):
+    def __init__(self,bstfile,cfconfig,spec,mw,type,transform,offset,unit,location,lat,lon,validation_figures=None):
         self._bstfile = bstfile
         self._cfconfig = cfconfig
         self._spec = spec 
         self._mw = mw 
         self._type = type
+        self._transform = transform
+        self._offset = offset 
         self._unit = unit 
         self._location = location 
         self._lat = lat 
@@ -70,6 +72,10 @@ class BoosterObj(object):
         pred = xgb.DMatrix(Xpred)
         prediction = self._bst.predict(pred)
         prior = np.array(Xpred[self._spec])
+        if self._transform == 'log':
+            prediction = np.exp(prediction)
+        if self._offset is not None:
+            prediction = prediction - self._offset
         if self._type == 'bias':
             prediction = prior + prediction
         return prior,prediction
@@ -88,6 +94,10 @@ class BoosterObj(object):
         '''Return predicted and true value'''
         prior,prediction = self.predict(X)
         truth = np.array(Y)
+        if self._transform == 'log':
+            prediction = np.exp(prediction)
+        if self._offset is not None:
+            prediction = prediction - self._offset
         if self._type=='bias':
             truth = prior + truth
         return prior,prediction,truth

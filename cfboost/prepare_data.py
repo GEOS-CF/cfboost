@@ -30,11 +30,12 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     obs_location_key = config.get('observations').get('obs_location_key','original_station_name')
     location_key, location_name_in_obsfile, location_lat, location_lon, region_name = get_location_info(config,location)
 #---(target) species settings
-    species_key, species_name_in_obsfile, species_mw, prediction_type, prediction_unit = get_species_info(config,species)
+    species_key, species_name_in_obsfile, species_mw, prediction_type, prediction_unit, transform, offset = get_species_info(config,species)
 #---verbose
     log.info('Prepare data for ML training - settings:')
     log.info('--> Location: {} ({:} degN, {:} degE; name in obsfile: {})'.format(location_key,location_lat,location_lon,location_name_in_obsfile))
-    log.info('--> Species: {}; Species name in obsfile: {}; MW: {}; Prediction unit: {}; Prediction type: {}'.format(species_key,species_name_in_obsfile,species_mw,prediction_unit,prediction_type))
+    log.info('--> Species: {}; Species name in obsfile: {}; MW: {}; Prediction unit: {}'.format(species_key,species_name_in_obsfile,species_mw,prediction_unit))
+    log.info('--> Prediction: {}; Transform: {}; Offset: {:.2}'.format(prediction_type,transform,offset if offset is not None else 0.0))
 #---observation data
     obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=0.0) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
     if check_latlon:
@@ -73,6 +74,13 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     if prediction_type == 'bias':
         obs_reduced['value'] = np.array(obs_reduced['value'].values) - np.array(mod_reduced[species_key].values)
         log.debug('After calculating bias: {}'.format(np.mean(obs_reduced['value'])))
+#---apply offset and transform, if needed
+    if offset is not None:
+        obs_reduced['value'] = obs_reduced['value'] + offset
+        log.debug('After offseting values: {}'.format(np.mean(obs_reduced['value'])))
+    if transform == 'log':
+        obs_reduced['value'] = np.log(obs_reduced['value'])
+        log.debug('After log-transform: {}'.format(np.mean(obs_reduced['value'])))
 #---split data
     predicted_values = np.array(obs_reduced['value'].values)
     if 'ISO8601' in mod_reduced.keys():
@@ -105,6 +113,7 @@ def prepare_prediction_data(mod,config,location=None,location_name=None,location
     mod_reduced = mod_reduced.groupby('ISO8601').sum().reset_index()
     mod_reduced['Hour'] = [i.hour for i in mod_reduced['ISO8601']]
     mod_reduced['Weekday'] = [i.weekday() for i in mod_reduced['ISO8601']]
+    mod_reduced['Month'] = [i.month for i in mod_reduced['ISO8601']]
     if trendday is not None:
         mod_reduced['Trendday'] = [(i-trendday).days for i in mod_reduced['ISO8601']]
 #---eventually drop values

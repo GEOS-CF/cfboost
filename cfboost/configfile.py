@@ -52,4 +52,6 @@ def get_species_info(config,species):
     species_mw   = specs.get('MW',np.nan)
     prediction_type = specs.get('prediction_type',DEFAULT_TYPE)
     prediction_unit = 'ugm-3' if 'pm25' in species else 'ppbv'
-    return species_key,name_in_obsfile,species_mw,prediction_type,prediction_unit
+    transform = specs.get('transform','N/A')
+    offset = specs.get('offset',None)
+    return species_key,name_in_obsfile,species_mw,prediction_type,prediction_unit,transform,offset

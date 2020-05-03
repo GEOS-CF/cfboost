@@ -127,7 +127,7 @@ class CFBoost(object):
             idat = self._init_prediction_table(initdate,lockey,lat,lon,var_PS,var_T,var_TPREC,var_U,var_V)
             # make prediction for each species, collect and write to file
             for ispec in species:
-                speckey,specname,mw,type,unit = get_species_info(self._config,ispec)
+                speckey,specname,mw,type,unit,transform,offset = get_species_info(self._config,ispec)
                 prior,pred = self.bst_predict( species=speckey, location=lockey )
                 if prior is None or pred is None:
                     log.warning('Booster does not exist - skip prediction for species {} at location {}'.format(speckey,lockey))
@@ -197,11 +197,12 @@ class CFBoost(object):
             self.bst_load(bstfile=bstfile)
         else:
             lockey,locname,lat,lon,region = get_location_info(self._config,location)
-            speckey,specname,mw,type,unit = get_species_info(self._config,species)
+            speckey,specname,mw,type,unit,transform,offset = get_species_info(self._config,species)
             xgbconfig = self._read_config('xgboost_config')
             validation_figures = self._read_config('validation_figures',config=xgbconfig)
-            bst = BoosterObj(bstfile=bstfile,cfconfig=self._cfconfig,spec=speckey,
-                   mw=mw,type=type,unit=unit,location=lockey,lat=lat,lon=lon,validation_figures=validation_figures)
+            bst = BoosterObj(bstfile=bstfile,cfconfig=self._cfconfig,spec=speckey,mw=mw,type=type,
+                   transform=transform,offset=offset,unit=unit,location=lockey,lat=lat,lon=lon,
+                   validation_figures=validation_figures)
             self._bst_add(bst,bstfile)
         return
 
@@ -313,7 +314,7 @@ class CFBoost(object):
     def _get_bstfile(self, location, species):
         '''Return the booster object filename'''
         lockey,locname,lat,lon,region = get_location_info(self._config,location)
-        speckey,specname,mw,type,unit = get_species_info(self._config,species)
+        speckey,specname,mw,type,unit,transform,offset = get_species_info(self._config,species)
         xgbconfig = self._read_config('xgboost_config')
         bstfile = self._read_config('bstfile',config=xgbconfig,default='bst_%l_%s_%t.pkl')
         bstfile = filename_parse(bstfile,lockey,speckey,type)
