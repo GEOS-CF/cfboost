@@ -92,18 +92,13 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         readvars[icol] = var_list
         readcols[icol] = templ
     # also create lists of location names, latitudes and longitudes
-    locs=[]; lons=[]; lats=[]
+    locs=[]; lons=[]; lats=[]; lonidxs=dict(); latidxs=dict()
     for iloc in config_loc.keys():
         locs.append(iloc)
         lons.append(config_loc.get(iloc).get('lon'))
         lats.append(config_loc.get(iloc).get('lat'))
-    # create (empty) data frame for every location. Will be filled with data below
-    if batch_write or return_data:
-        df_loc = dict()
-        for iloc in config_loc.keys():
-            df_loc[iloc] = pd.DataFrame()
-    else:
-        df_loc = None
+    # create (empty) data frame for all data. Will be filled with data below
+    alldat = pd.DataFrame()
 #---Select timestamps to be read
     datelist = []
     if duration is not None:
@@ -126,12 +121,13 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         #---Load collections for this day 
         dslist = _load_files(readcols,idate,jdate,hrtoken,error_if_not_found)
         #---Read data for every location
-        dfs = _sample_files(dslist,readvars,locs,lats,lons,resample)      
-        for iloc in locs:
-            if batch_write or return_data:
-                df_loc[iloc] = df_loc[iloc].append(dfs.get(iloc).copy(),sort=True)
-            if write_data and not batch_write:
-                write_csv(dfs.get(iloc),ofile_template,opened_files,idate,iloc,append,**kwargs)
+        outdat,latidxs,lonidxs = _sample_files(dslist,readvars,locs,lats,lons,latidxs,lonidxs)
+        #---Full data array
+        if batch_write or return_data:
+            alldat = alldat.append(outdat)
+        # Eventually write to file
+        if write_data and not batch_write:
+            opened_files = _write_all(outdat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
         #---Close all files
         for l in dslist:
             if dslist[l] is not None:
@@ -140,9 +136,15 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
     # Write out files
     if write_data and batch_write:
         idate = datelist[0] + ( datelist[-1]-datelist[0] ) / 2
-        for iloc in locs:
-            opened_files = write_csv(df_loc[iloc],ofile_template,opened_files,idate,iloc,append,**kwargs)
+        opened_files = _write_all(alldat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
+    if return_data:
+        df_loc = dict()
+        for l in locs:
+            df_loc[l] = alldat.loc[alldat['location']==l].copy()
+    else:
+        df_loc = None
     # All done
+    del(alldat)
     t2 = time.time()
     log.info('This took {:.4f} seconds'.format(t2-t1))
     return df_loc 
@@ -177,77 +179,89 @@ def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
                 else:
                     log.warning('Error reading file - will will with NaNs: {}'.format(templ))
                     ds = None
+        # Make data 3d (time,lat,lon)
+        if ds is not None:
+            if 'lev' in ds.coords:
+                nlev = len(ds.lev)
+                ds = ds.sel(lev=nlev-1,method='nearest')
         dslist[icol] = ds
     return dslist
 
 
-def _sample_files(dslist,readvars,locs,lats,lons,resample):
+def _sample_files(dslist,readvars,locs,lats,lons,latidxs,lonidxs):
     '''
     Sample the previously opened files (--> dslist) at given locations. 
+    The data is written into a single data frame.
     '''
     log = logging.getLogger(__name__)
-    # Create output data frame, set 'meta data' 
-    df_empty = pd.DataFrame()
-    for icol in dslist:
-        if dslist.get(icol) is None:
-            continue
-        else:
-            break
-    df_empty['ISO8601'] = dslist.get(icol).time.values
-    nval = df_empty.shape[0]
-    dflist = dict()
-    for l in locs:
-        dflist[l] = df_empty.copy() 
+    outdat = pd.DataFrame()
+    empty_collections = []
     # Loop over all collections 
     for icol in readvars:
-        log.info('Reading collection {}...'.format(icol))
-        vars = readvars.get(icol)
-        idflist = dict()
-        for l in locs:
-            idflist[l] = pd.DataFrame()
-        # Fill with NaN's if collection not found 
+        idat = pd.DataFrame()
         ids = dslist.get(icol)
         if ids is None:
-            for l in locs:
-                for v in vars:
-                    dflist[l][v] = np.zeros((nval,))*np.nan
+            emtpy_collections.append(icol)
+            log.warning('No data found for collection {} - will be filled with NaNs'.format(icol))
             continue
-        # Error check: make sure all collections have same # of time stamps
-        if ids.time.shape[0] != nval:
-            log.warning('Warning: not the same number of time stamps - some values will be filled with NaNs: {}'.format(icol))
-        # Set time stamp
-        for l in locs:
-            idflist[l]['ISO8601'] = ids.time.values
-        if 'lev' in ids.dims:
-            nlev = len(ids.lev)
+        log.info('Reading collection {}...'.format(icol))
+        # variables and lat/lon indeces to read
+        vars = readvars.get(icol)
+        if icol not in latidxs:
+            latidx = [np.abs(ids.lat.values-i).argmin() for i in lats]
+            lonidx = [np.abs(ids.lon.values-i).argmin() for i in lons]
+            latidxs[icol] = latidx 
+            lonidxs[icol] = lonidx 
         else:
-            nlev = 0
-        # Get variable
+            latidx = latidxs.get(icol)
+            lonidx = lonidxs.get(icol)
+        # create tuple of indeces
+        ntime = len(ids.time.values) 
+        tidx = np.repeat(np.arange(ntime),len(locs)) # [0,0,...,1,1,...,ntime-1,ntime-1]
+        lidx = np.tile(np.array(latidx),ntime)       # [latidx0,latidx1,...,latidx1,latidx2,...]
+        nidx = np.tile(np.array(lonidx),ntime)       # [lonidx0,lonidx1,...,lonidx1,lonidx2,...]
+        idxs = tuple((tidx,lidx,nidx))
+        # create data frame for this collection, add meta data 
+        idat['ISO8601'] = ids.time.values[tidx]
+        idat['location'] = list(np.tile(locs,ntime)) 
+        idat['lat'] = list(np.tile(lats,ntime)) 
+        idat['lon'] = list(np.tile(lons,ntime)) 
+        # read data for each variable
         for v in vars:
-            for iloc,ilat,ilon in zip(locs,lats,lons):
-                if 'lev' in ids[v].dims:
-                    idflist[iloc][v] = ids[v].sel(lat=ilat,lon=ilon,lev=nlev-1,method='nearest').values
-                else:
-                    idflist[iloc][v] = ids[v].sel(lat=ilat,lon=ilon,method='nearest').values
-        # Merge into main frame
-        for l in locs:
-            dflist[l] = pd.merge(dflist[l],idflist[l],on='ISO8601',how='outer')
-    # post-processcing
-    for iloc,ilat,ilon in zip(locs,lats,lons):
-        df = dflist.get(iloc)
-        # eventually resample data 
-        if resample is not None:
-            df.index = df['ISO8601']
-            df = df.resample(resample).mean().reset_index()
-        # set 'meta data'
-        nrow           = df.shape[0]
-        df['location'] = [iloc for x in range(nrow)]
-        df['lat']      = [ilat for x in range(nrow)]
-        df['lon']      = [ilon for x in range(nrow)]
-        df['year']     = [i.year for i in df['ISO8601']]
-        df['month']    = [i.month for i in df['ISO8601']]
-        df['day']      = [i.day for i in df['ISO8601']]
-        df['hour']     = [i.hour for i in df['ISO8601']]
-        # add this to be safe, not sure it is needed:
-        dflist[iloc] = df
-    return dflist
+            idat[v] = ids[v].values[idxs]
+        if outdat.shape[0] == 0:
+            outdat = idat
+        else:
+            outdat = outdat.merge(idat,how='outer')
+    # check for emtpy collections
+    if outdat.shape[0] > 0:
+        for icol in empty_collections: 
+            idat = pd.DataFrame()
+            vars = readvars.get(icol)
+            idat['ISO8601'] = np.repeat(outdat['ISO8601'].values[0],len(locs))
+            idat['location'] = locs
+            idat['lat'] = lats
+            idat['lon'] = lons
+            for v in vars:
+                idat[v] = [np.nan for i in range(len(loncs))]
+            outdat = outdat.merge(idat,how='outer')
+    return outdat,latidxs,lonidxs
+
+
+def _write_all(alldat,locs,resample,ofile_template,opened_files,idate,append,**kwargs):
+    '''
+    Wrapper routine to write data to csv file (by location)
+    '''
+    for l in locs:
+        idat = alldat.loc[alldat['location']==l].copy()
+        if idat.shape[0]>0:
+            if resample is not None:
+                idat.index = idat['ISO8601']
+                idat = idat.resample(resample).mean().reset_index()
+            idat['year'] = [i.year for i in idat['ISO8601']]
+            idat['month'] = [i.month for i in idat['ISO8601']]
+            idat['day'] = [i.day for i in idat['ISO8601']]
+            idat['hour'] = [i.hour for i in idat['ISO8601']]
+            opened_files = write_csv(idat,ofile_template,opened_files,idate,l,append,**kwargs)
+    return opened_files
+
