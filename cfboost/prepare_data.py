@@ -135,11 +135,11 @@ def _convert2ppbv(obs,mod,mw,temp_name='temp_for_unit',ps_name='press_for_unit')
             log.error('Surface pressure not found in model: {}'.format(ps_name),exc_info=True)
             return None
         # Calculate conversion factor for selected dates
-        dates = obs.loc[idx,'ISO8601']
+        dates = obs.loc[idx,'ISO8601'].unique()
         imod  = mod.loc[mod['ISO8601'].isin(dates),['ISO8601',temp_name,ps_name]].sort_values(by='ISO8601').copy()
         imod['conv'] = cfobs_units.get_conv_ugm3_to_ppbv(imod,temperature_name=temp_name,pressure_name=ps_name,mw=mw)
         tmp = pd.DataFrame()
-        tmp['ISO8601'] = obs['ISO8601']
+        tmp['ISO8601'] = obs.loc[idx,'ISO8601']
         tmp = tmp.merge(imod)
         obs.loc[idx,'value'] = np.array(obs.loc[idx,'value'].values*tmp['conv'].values)
         log.debug('Converted ugm-3 to ppbv for {:} values'.format(len(idx)))
