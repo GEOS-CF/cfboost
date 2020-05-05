@@ -34,7 +34,7 @@ def obs_load(config,obsfile=None,location=None,read_all=False,**kwargs):
         else:
             log.warning('No locations specified in configuration file - will read full file')
             locations = [location]
-        obsfile = obsfile.replace('%n',locations[0])
+        obsfile = obsfile.replace('%l',locations[0])
 #---Read observations file
     if locations is not None:
         obs_location_key = config.get('observations').get('obs_location_key','original_station_name')
