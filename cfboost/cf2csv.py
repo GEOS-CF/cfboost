@@ -23,7 +23,7 @@ import dask
 from .csv_table import write_csv
 
 def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=False,read_freq='1D',error_if_not_found=True,
-           resample=None,write_data=True,batch_write=False,append=False,return_data=False,**kwargs):
+           resample=None,write_data=True,batch_write=False,batch_size=-999,append=False,return_data=False,**kwargs):
     '''
     Open GEOS-CF data, read selected variables at given locations, and write them to a pandas data frame.
     The file and variable information, as well as the location information, must be provided through dictionaries.
@@ -53,6 +53,8 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         write data to csv file?
     batch_write: bool
         if true, will write out the entire data at the end. Otherwise, the data will be written out as the batches are being read.
+    batch_size: int 
+        if set to positive value, will write batches after that many tiem updates. If negative, will write at the end. 
     append: bool
         append data that is written out to an existing file?
     return_data: bool
@@ -112,7 +114,14 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
     hrtoken = '*'
 #---Read data for each date
     t1 = time.time()
+    cnt = 0
+    batchdat = pd.DataFrame()
     for i in range(len(datelist)-1):
+        if cnt > batch_size and batch_size > 0:
+            opened_files = _write_all(batchdat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
+            del(batchdat)
+            batchdat = pd.DataFrame()
+            cnt = 0
         idate = datelist[i]
         jdate = datelist[i+1]
         if 'H' in read_freq:
@@ -123,8 +132,10 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         #---Read data for every location
         outdat,latidxs,lonidxs = _sample_files(dslist,readvars,locs,lats,lons,latidxs,lonidxs)
         #---Full data array
-        if batch_write or return_data:
+        if return_data:
             alldat = alldat.append(outdat)
+        if batch_write:
+            batchdat = batchdat.append(outdat)
         # Eventually write to file
         if write_data and not batch_write:
             opened_files = _write_all(outdat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
@@ -133,10 +144,12 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
             if dslist[l] is not None:
                 fid = dslist.get(l)
                 fid.close()
+        # increase counter
+        cnt += 1 
     # Write out files
     if write_data and batch_write:
         idate = datelist[0] + ( datelist[-1]-datelist[0] ) / 2
-        opened_files = _write_all(alldat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
+        opened_files = _write_all(batchdat,locs,resample,ofile_template,opened_files,idate,append,**kwargs)
     if return_data:
         df_loc = dict()
         for l in locs:
@@ -145,6 +158,7 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         df_loc = None
     # All done
     del(alldat)
+    del(batchdat)
     t2 = time.time()
     log.info('This took {:.4f} seconds'.format(t2-t1))
     return df_loc 
