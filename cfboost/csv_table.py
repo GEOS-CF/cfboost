@@ -16,7 +16,7 @@ import pandas as pd
 
 from cfobs.systools import check_dir as check_dir
 
-def write_csv(df,ofile_template,opened_files,idate,iloc,append=False,hdr_start=None,**kwargs):
+def write_csv(df,ofile_template,opened_files,idate,iloc,append=False,hdr_start=None,na_rep='NaN',**kwargs):
     '''Write the dataframe 'df' to a csv file.'''
     log = logging.getLogger(__name__)
     # File to write to
@@ -54,7 +54,7 @@ def write_csv(df,ofile_template,opened_files,idate,iloc,append=False,hdr_start=N
                 hdr_start.append(i)
             df = df[hdr_start]
     # Write to file
-    df.to_csv(ofile,mode=wm,date_format='%Y-%m-%dT%H:%M:%SZ',index=False,header=hdr,na_rep='NaN',**kwargs)
+    df.to_csv(ofile,mode=wm,date_format='%Y-%m-%dT%H:%M:%SZ',index=False,header=hdr,na_rep=na_rep,**kwargs)
     log.info('Data for location {} written to {}'.format(iloc,ofile))
     if ofile not in opened_files:
         opened_files.append(ofile)

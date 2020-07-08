@@ -104,7 +104,7 @@ class CFBoost(object):
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,**kwargs):
+    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -143,7 +143,7 @@ class CFBoost(object):
                 idat[speckey+'_ML_['+unit+']'  ] = pred
             # write table
             itemplate = ofile_template.replace('%r',region)
-            opened_files = write_csv(df=idat,ofile_template=itemplate,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f')
+            opened_files = write_csv(df=idat,ofile_template=itemplate,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f',na_rep=na_rep)
         return
 
 
