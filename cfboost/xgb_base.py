@@ -72,12 +72,14 @@ class BoosterObj(object):
         pred = xgb.DMatrix(Xpred)
         prediction = self._bst.predict(pred)
         prior = np.array(Xpred[self._spec])
-        if self._transform == 'log':
-            prediction = np.exp(prediction)
-        if self._offset is not None:
-            prediction = prediction - self._offset
         if self._type == 'bias':
-            prediction = prior + prediction
+            corrected = False
+            if hasattr(self,'_transform'):
+                if self._transform == 'log':
+                    prediction = prior * np.exp(prediction)
+                    corrected = True 
+            if not corrected:
+                prediction = prior + prediction
         return prior,prediction
 
 
@@ -94,12 +96,14 @@ class BoosterObj(object):
         '''Return predicted and true value'''
         prior,prediction = self.predict(X)
         truth = np.array(Y)
-        if self._transform == 'log':
-            prediction = np.exp(prediction)
-        if self._offset is not None:
-            prediction = prediction - self._offset
         if self._type=='bias':
-            truth = prior + truth
+            corrected = False
+            if hasattr(self,'_transform'):
+                if self._transform=='log':
+                    truth = prior * np.exp(truth)
+                    corrected = True 
+            if not corrected: 
+                truth = prior + truth
         return prior,prediction,truth
 
  
