@@ -23,7 +23,7 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -36,8 +36,19 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     log.info('--> Location: {} ({:} degN, {:} degE; name in obsfile: {})'.format(location_key,location_lat,location_lon,location_name_in_obsfile))
     log.info('--> Species: {}; Species name in obsfile: {}; MW: {}; Prediction unit: {}'.format(species_key,species_name_in_obsfile,species_mw,prediction_unit))
     log.info('--> Prediction: {}; Transform: {}; Offset: {:.2}'.format(prediction_type,transform,offset if offset is not None else 0.0))
+    if trendday is not None:
+        log.info(trendday.strftime('Will use trendday starting at %Y-%m-%d'))
 #---observation data
-    obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=0.0) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
+    obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=minval) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
+    if outliers_sigma is not None and obs_reduced.shape[0]>0:
+        avg = obs_reduced['value'].values.mean()
+        std = obs_reduced['value'].values.std()
+        minval = avg - outliers_sigma*std
+        maxval = avg + outliers_sigma*std
+        nbefore = obs_reduced.shape[0]
+        obs_reduced = obs_reduced.loc[(obs_reduced['value']>=minval)&(obs_reduced['value']<=maxval)].copy()
+        nafter  = obs_reduced.shape[0]
+        log.info('Removed {} outliers ({:.2f}%)'.format(nbefore-nafter,(nbefore-nafter)/nbefore*100.0))
     if check_latlon:
         laterr,lonerr = _latlon_check(obs_reduced,location_lat,location_lon)
         if laterr or lonerr:
@@ -72,15 +83,19 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
     log.debug('After grouping: {}'.format(np.mean(obs_reduced['value'])))
 #---extract prediction values, convert to bias if needed
     if prediction_type == 'bias':
-        obs_reduced['value'] = np.array(obs_reduced['value'].values) - np.array(mod_reduced[species_key].values)
+        mod = np.array(mod_reduced[species_key].values)
+        obs = np.array(obs_reduced['value'].values) 
+        # log transform: convert concentrations to log before doing bias correction:
+        # log(obs)-log(mod) = log(obs/mod).
+        if transform == 'log':
+            if minval is not None:
+                mod[mod<=0.0] = minval
+            #mod = np.where(mod>0.0,np.log(mod),0.0)
+            #obs = np.where(obs>0.0,np.log(obs),0.0)
+            mod[mod>0.0] = np.log(mod[mod>0.0])
+            obs[obs>0.0] = np.log(obs[obs>0.0])
+        obs_reduced['value'] = obs - mod
         log.debug('After calculating bias: {}'.format(np.mean(obs_reduced['value'])))
-#---apply offset and transform, if needed
-    if offset is not None:
-        obs_reduced['value'] = obs_reduced['value'] + offset
-        log.debug('After offseting values: {}'.format(np.mean(obs_reduced['value'])))
-    if transform == 'log':
-        obs_reduced['value'] = np.log(obs_reduced['value'])
-        log.debug('After log-transform: {}'.format(np.mean(obs_reduced['value'])))
 #---split data
     predicted_values = np.array(obs_reduced['value'].values)
     if 'ISO8601' in mod_reduced.keys():
