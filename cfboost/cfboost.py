@@ -32,6 +32,7 @@ from .prepare_data import prepare_prediction_data
 from .xgb_base     import BoosterObj
 from .tools        import filename_parse
 from .csv_table    import write_csv
+from .plot         import plot_pred_vs_obs
 
 
 class CFBoost(object):
@@ -104,7 +105,7 @@ class CFBoost(object):
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',**kwargs):
+    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',write_table=True,return_table=False,**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -117,6 +118,8 @@ class CFBoost(object):
         if read_netcdf:
             startday = self.model_read( startday=startday, write_data=False, return_data=True, **kwargs )
         opened_files = []
+        if return_table:
+            tables = []
         for iloc in locations:
             if not read_netcdf:
                 self.model_load( location=iloc )
@@ -142,8 +145,22 @@ class CFBoost(object):
                 idat[speckey+'_orig_['+unit+']'] = prior 
                 idat[speckey+'_ML_['+unit+']'  ] = pred
             # write table
-            itemplate = ofile_template.replace('%r',region)
-            opened_files = write_csv(df=idat,ofile_template=itemplate,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f',na_rep=na_rep)
+            if write_table:
+                itemplate = ofile_template.replace('%r',region)
+                opened_files = write_csv(df=idat,ofile_template=itemplate,opened_files=opened_files,idate=startday,iloc=lockey,append=False,float_format='%.4f',na_rep=na_rep)
+            if return_table:
+                tables.append(idat)
+        if return_table:
+            return pd.concat(tables)
+        else:
+            return
+
+
+    def pred_vs_obs(self,**kwargs):
+        '''Compare predictions vs. observations'''
+        modtable = self.predict(read_netcdf=False,write_table=False,return_table=True) 
+        self.obs_load()
+        plot_pred_vs_obs(modtable,self._obs,**kwargs)
         return
 
 
