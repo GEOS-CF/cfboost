@@ -131,6 +131,9 @@ def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=Fals
         dslist = _load_files(readcols,idate,jdate,hrtoken,error_if_not_found)
         #---Read data for every location
         outdat,latidxs,lonidxs = _sample_files(dslist,readvars,locs,lats,lons,latidxs,lonidxs)
+        # add initialization date if it's forecast data
+        if forecast:
+            outdat['ISO8601_init'] = [idate for i in range(outdat.shape[0])]
         #---Full data array
         if return_data:
             alldat = alldat.append(outdat)
@@ -182,7 +185,7 @@ def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
                 if error_if_not_found:
                     log.error('Could not read {}'.format(templ),exc_info=True)
                 else:
-                    log.warning('Error reading file - will will with NaNs: {}'.format(templ))
+                    log.warning('Error reading file - will fill with NaNs: {}'.format(templ))
                     ds = None
         else:
             try: 
@@ -191,7 +194,7 @@ def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
                 if error_if_not_found:
                     log.error('Could not read {}'.format(templ),exc_info=True)
                 else:
-                    log.warning('Error reading file - will will with NaNs: {}'.format(templ))
+                    log.warning('Error reading file - will fill with NaNs: {}'.format(templ))
                     ds = None
         # Make data 3d (time,lat,lon)
         if ds is not None:

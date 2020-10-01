@@ -67,6 +67,10 @@ def _check_vars(mod,config_cf):
             log.error('Variable not found in CF file: {}'.format(var),exc_info=True)
             return None
         mod_out[var] = mod[var].values
+    # also pass ISO8601_init if available
+    var = 'ISO8601_init'
+    if var in mod.keys():
+        mod_out[var] = mod[var].values
     # pass model variables
     collections = config_cf.get('collections')
     for col in collections.keys():
