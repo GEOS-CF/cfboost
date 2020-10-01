@@ -90,11 +90,20 @@ def _plot_single_ts(ax,ldat,ispec,munit,origvar,mlvar,obsvar='value',title=None)
     unitl = '[$\mu$gm$^{-3}$]' if 'ugm-3' in munit else '[ppbv]'
     if ispec=='no2':
         ylabel = 'NO$_{2}$ '+unitl
+        defmax = 40.0
     if ispec=='o3':
         ylabel = 'O$_{3}$ '+unitl
+        defmax = 80.0
     if 'pm25' in ispec:
         ylabel = 'PM$_{2.5}$ '+unitl
-    maxval = np.max([np.max(ldat[origvar]),np.max(ldat[mlvar]),np.max(ldat['value'])])
+        defmax = 100.0
+    origmax = np.nanmax(ldat[origvar].values)
+    origmax = defmax if np.isnan(origmax) else origmax
+    mlmax = np.nanmax(ldat[mlvar].values)
+    mlmax = defmax if np.isnan(mlmax) else mlmax
+    obsmax = np.nanmax(ldat['value'].values)
+    obsmax = defmax if np.isnan(obsmax) else obsmax
+    maxval = np.max([origmax,mlmax,obsmax])
     ylim = [0,maxval]
     ax.set_ylim(ylim)
     ax.set_ylabel(ylabel)

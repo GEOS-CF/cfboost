@@ -23,7 +23,7 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,minobs=None,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -40,7 +40,12 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         log.info(trendday.strftime('Will use trendday starting at %Y-%m-%d'))
 #---observation data
     obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=minval) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
-    if outliers_sigma is not None and obs_reduced.shape[0]>0:
+    nobs = obs_reduced.shape[0]
+    if minobs is not None:
+        if nobs < minobs:
+            log.warning('Not enough observations found: {} vs {}'.format(nobs,minobs))
+            return None,None,None,None
+    if outliers_sigma is not None and nobs>0:
         avg = obs_reduced['value'].values.mean()
         std = obs_reduced['value'].values.std()
         minval = avg - outliers_sigma*std
@@ -110,7 +115,7 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
 
 def prepare_prediction_data(mod,config,location=None,location_name=None,location_lat=None,
                             location_lon=None,check_latlon=False,drop=['location','lat','lon','press_for_unit','temp_for_unit'],
-                            round_minutes=True,trendday=None):
+                            round_minutes=True,trendday=None,group=True):
     '''Prepare model data for model prediction'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -125,7 +130,9 @@ def prepare_prediction_data(mod,config,location=None,location_name=None,location
             return None
     if round_minutes:
         mod_reduced['ISO8601'] = [dt.datetime(i.year,i.month,i.day,i.hour,0,0) for i in mod_reduced['ISO8601']]
-    mod_reduced = mod_reduced.groupby('ISO8601').sum().reset_index()
+    if group:
+        #mod_reduced = mod_reduced.groupby('ISO8601').sum().reset_index()
+        mod_reduced = mod_reduced.groupby('ISO8601').mean().reset_index()
     mod_reduced['Hour'] = [i.hour for i in mod_reduced['ISO8601']]
     mod_reduced['Weekday'] = [i.weekday() for i in mod_reduced['ISO8601']]
     mod_reduced['Month'] = [i.month for i in mod_reduced['ISO8601']]
