@@ -105,7 +105,7 @@ class CFBoost(object):
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',write_table=True,return_table=False,**kwargs):
+    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',write_table=True,return_table=False,groupby_vars=None,**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -123,6 +123,9 @@ class CFBoost(object):
         for iloc in locations:
             if not read_netcdf:
                 self.model_load( location=iloc )
+            # group data
+            if groupby_vars is not None:
+                self.model_group( location=iloc, groupby_vars=groupby_vars )
             # prepare model data at this location
             lockey,locname,lat,lon,region = get_location_info(self._config,iloc)
             self.prepare_prediction_data( location=lockey, drop=['location','lat','lon','press_for_unit','temp_for_unit'] )
@@ -158,7 +161,7 @@ class CFBoost(object):
 
     def pred_vs_obs(self,**kwargs):
         '''Compare predictions vs. observations'''
-        modtable = self.predict(read_netcdf=False,write_table=False,return_table=True) 
+        modtable = self.predict(read_netcdf=False,write_table=False,return_table=True)
         self.obs_load()
         plot_pred_vs_obs(modtable,self._obs,**kwargs)
         return
@@ -167,6 +170,15 @@ class CFBoost(object):
     def obs_load(self,**kwargs):
         '''Load observation data'''
         self._obs = obs_load(config=self._config,**kwargs)
+        return
+
+    def model_group(self,location=None,groupby_vars=None):
+        '''Group (previously read) model data by specified columns'''
+        if groupby_vars is None:
+            return
+        locs = [location] if location is not None else list(self._mod.keys())
+        for l in locs:
+            self._mod[l] = self._mod[l].groupby(groupby_vars).mean().reset_index()
         return
 
 
