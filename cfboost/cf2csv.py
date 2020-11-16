@@ -23,7 +23,7 @@ import dask
 from .csv_table import write_csv
 
 def cf2csv(config_cf,config_loc,startday,endday=None,duration=None,forecast=False,read_freq='1D',error_if_not_found=True,
-           resample=None,write_data=True,batch_write=False,batch_size=-999,append=False,return_data=False,**kwargs):
+           resample=None,write_data=True,batch_write=False,batch_size=-999,append=False,return_data=False,*kwargs):
     '''
     Open GEOS-CF data, read selected variables at given locations, and write them to a pandas data frame.
     The file and variable information, as well as the location information, must be provided through dictionaries.
@@ -189,7 +189,7 @@ def _load_files(readcols,idate,jdate=None,hrtoken='*',error_if_not_found=False):
                     ds = None
         else:
             try: 
-                ds = xr.open_mfdataset(templ) 
+                ds = xr.open_mfdataset(templ,combine='by_coords') 
             except:
                 if error_if_not_found:
                     log.error('Could not read {}'.format(templ),exc_info=True)
