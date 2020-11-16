@@ -23,7 +23,7 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,minobs=None,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,minobs=None,mindate=None,maxdate=None,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -40,6 +40,11 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         log.info(trendday.strftime('Will use trendday starting at %Y-%m-%d'))
 #---observation data
     obs_reduced = obs.loc[(obs['obstype']==species_name_in_obsfile) & (obs['value']>=minval) & (~np.isnan(obs['value'])) & (obs[obs_location_key]==location_name_in_obsfile)].copy()
+#---restrict to range of dates if specified
+    if mindate is not None:
+         obs_reduced = obs_reduced.loc[obs_reduced['ISO8601']>=mindate].copy()
+    if maxdate is not None:
+         obs_reduced = obs_reduced.loc[obs_reduced['ISO8601']<maxdate].copy()
     nobs = obs_reduced.shape[0]
     if minobs is not None:
         if nobs < minobs:
