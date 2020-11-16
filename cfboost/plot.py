@@ -33,7 +33,7 @@ def plot_pred_vs_obs(modtable,obs,**kwargs):
     return
 
 
-def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1D',loccol='original_station_name'):
+def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1D',loccol='original_station_name',titlecol=None):
     '''Plot predictions vs observations.'''
     log = logging.getLogger(__name__)
     idat = modtable.loc[modtable['Location']==iloc]
@@ -45,6 +45,12 @@ def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1
     ncol = 1
     fig = plt.figure(figsize=(6*ncol,2*nrow))
     cnt = 0
+    # define title
+    title = iloc
+    if titlecol is not None:
+        tmp = obs.loc[obs[loccol]==iloc]
+        if tmp.shape[0] > 0:
+            title = tmp[titlecol].values[0]
     for irow,ispec in enumerate(['o3','no2','pm25_gcc']):
         obsspec = ispec if 'pm25' not in ispec else 'pm25'
         iobs = obs.loc[(obs[loccol]==iloc)&(obs.obstype==obsspec)].copy()
@@ -62,7 +68,7 @@ def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1
         cnt += 1
     # clean up
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig.suptitle(iloc)
+    fig.suptitle(title)
     ofile = ofile_template.replace('%l',iloc)
     fig.savefig(ofile)
     plt.close()
