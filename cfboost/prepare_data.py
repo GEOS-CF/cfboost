@@ -8,6 +8,7 @@
 import os
 import pandas
 import logging
+import random
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ from .configfile import get_species_info
 ROUNDING_PRECISION = 4
 
 
-def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,minobs=None,mindate=None,maxdate=None,**kwargs):
+def prepare_training_data(mod,obs,config,location,species=None,check_latlon=False,mod_drop=['location','lat','lon'],round_minutes=True,trendday=None,minval=0.01,outliers_sigma=None,minobs=None,mindate=None,maxdate=None,nsplit=None,isplit=None,**kwargs):
     '''Prepare data for ML training.'''
     log = logging.getLogger(__name__)
 #---location settings
@@ -107,14 +108,25 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         obs_reduced['value'] = obs - mod
         log.debug('After calculating bias: {}'.format(np.mean(obs_reduced['value'])))
 #---split data
-    predicted_values = np.array(obs_reduced['value'].values)
-    if 'ISO8601' in mod_reduced.keys():
-        _ = mod_reduced.pop('ISO8601')
     if 'press_for_unit' in mod_reduced.keys():
         _ = mod_reduced.pop('press_for_unit')
     if 'temp_for_unit' in mod_reduced.keys():
         _ = mod_reduced.pop('temp_for_unit')
-    Xtrain,Xvalid,Ytrain,Yvalid = train_test_split( mod_reduced, predicted_values, **kwargs )
+    if 'ISO8601' in mod_reduced.keys():
+        _ = mod_reduced.pop('ISO8601')
+    predicted_values = np.array(obs_reduced['value'].values)
+    # split in set chunks
+    if nsplit is not None:
+        mod_split = np.array_split(mod_reduced,nsplit)
+        obs_split = np.array_split(predicted_values,nsplit)
+        ii = isplit if isplit is not None else random.choice(np.arange(nsplit))
+        Xvalid = mod_split.pop(ii)
+        Yvalid = obs_split.pop(ii)
+        Xtrain = pd.concat(mod_split)
+        Ytrain = np.concatenate(obs_split)
+    # split randomly
+    else:
+        Xtrain,Xvalid,Ytrain,Yvalid = train_test_split( mod_reduced, predicted_values, **kwargs )
     return Xtrain, Xvalid, Ytrain, Yvalid
 
 

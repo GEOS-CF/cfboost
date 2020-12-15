@@ -29,10 +29,11 @@ class BoosterObj(object):
     '''
     Booster object. 
     '''
-    def __init__(self,bstfile,cfconfig,spec,mw,type,transform,offset,unit,location,lat,lon,validation_figures=None):
+    def __init__(self,bstfile,cfconfig,spec,mw,type,transform,offset,unit,location,lat,lon,validation_figures=None,instance=None):
         self._bstfile = bstfile
         self._cfconfig = cfconfig
         self._spec = spec 
+        self._instance = instance
         self._mw = mw 
         self._type = type
         self._transform = transform
@@ -43,7 +44,7 @@ class BoosterObj(object):
         self._lon = lon 
         self._bst = None
         self._feature_names = None
-        self._validation_figures = validation_figures if validation_figures is not None else 'xgb_%k_%l_%s_%t.png'
+        self._validation_figures = validation_figures if validation_figures is not None else 'xgb_%k_%l_%s_%t_%n.png'
 
 
     def train(self,Xtrain,Ytrain,resume=True,params=None):
@@ -142,7 +143,7 @@ class BoosterObj(object):
         title = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
         plt.tight_layout(rect=[0,0.03,1,0.95])
-        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
+        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type,self._instance) 
         ofile = ofile.replace('*','scatter')
         check_dir(ofile,idate)
         fig.savefig(ofile)
@@ -168,7 +169,7 @@ class BoosterObj(object):
         title  = filename_parse(title,self._location,self._spec,self._type) 
         fig.suptitle(title,y=0.98)
         plt.tight_layout(rect=[0,0.03,1,0.95])
-        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type) 
+        ofile = filename_parse(self._validation_figures,self._location,self._spec,self._type,self._instance) 
         ofile = ofile.replace('*','features')
         check_dir(ofile,idate)
         fig.savefig(ofile)
@@ -194,6 +195,11 @@ class BoosterObj(object):
             Xnew = X[self._feature_names].copy()
         del X
         return Xnew
+
+
+    def get_features(**kwargs):
+        '''Return features of the booster object'''
+        return self._bst.get_score(**kwargs)
 
 
 def plot_scatter(ax,x,y,minval,maxval,xlab,ylab,title):

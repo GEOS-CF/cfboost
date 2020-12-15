@@ -84,7 +84,7 @@ class CFBoost(object):
         return
 
 
-    def train(self,location=None,species=None,read_obs_by_location=False,read_bst_if_exists=True,**kwargs):
+    def train(self,location=None,species=None,instance=None,read_obs_by_location=False,read_bst_if_exists=True,**kwargs):
         '''Train model for locations and species in the configuration file'''
         locs,specs = get_locations_and_species(self._config)
         locations = [location] if location is not None else locs
@@ -99,13 +99,13 @@ class CFBoost(object):
                 rc = self.prepare_training_data( location=iloc, species=ispec, **kwargs )
                 if rc != 0:
                     continue
-                self.bst_add( read_if_exists=read_bst_if_exists, species=ispec, location=iloc )
-                self.bst_train_and_validate( species=ispec, location=iloc )
-                self.bst_save( species=ispec, location=iloc )
+                self.bst_add( read_if_exists=read_bst_if_exists, species=ispec, location=iloc, instance=instance )
+                self.bst_train_and_validate( species=ispec, location=iloc, instance=instance )
+                self.bst_save( species=ispec, location=iloc, instance=instance )
         return
 
 
-    def predict(self,startday=None,location=None,species=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',write_table=True,return_table=False,groupby_vars=None,**kwargs):
+    def predict(self,startday=None,location=None,species=None,instance=None,read_netcdf=True,var_PS='ps',var_T='t10m',var_TPREC='tprec',var_U='u10m',var_V='v10m',in_ug=False,na_rep='NaN',write_table=True,return_table=False,groupby_vars=None,**kwargs):
         '''Make a prediction for locations and species in the configuration file and save if to csv file.'''
         log = logging.getLogger(__name__)
         # settings
@@ -134,7 +134,7 @@ class CFBoost(object):
             # make prediction for each species, collect and write to file
             for ispec in species:
                 speckey,specname,mw,type,unit,transform,offset = get_species_info(self._config,ispec)
-                prior,pred = self.bst_predict( species=speckey, location=lockey )
+                prior,pred = self.bst_predict( species=speckey, location=lockey, instance=instance )
                 if prior is None or pred is None:
                     log.warning('Booster does not exist - skip prediction for species {} at location {}'.format(speckey,lockey))
                     prior = self._mod[lockey][speckey].values
@@ -217,11 +217,11 @@ class CFBoost(object):
         return
 
 
-    def bst_add(self,bstfile=None,read_if_exists=True,species=None,location=None):
+    def bst_add(self,bstfile=None,read_if_exists=True,species=None,location=None,instance=None):
         '''Add booster object'''
         log = logging.getLogger(__name__)
         if bstfile is None:
-            bstfile = self._get_bstfile( location=location, species=species )
+            bstfile = self._get_bstfile( location=location, species=species, instance=instance )
         if os.path.exists(bstfile) and read_if_exists:
             self.bst_load(bstfile=bstfile)
         else:
@@ -231,23 +231,23 @@ class CFBoost(object):
             validation_figures = self._read_config('validation_figures',config=xgbconfig)
             bst = BoosterObj(bstfile=bstfile,cfconfig=self._cfconfig,spec=speckey,mw=mw,type=type,
                    transform=transform,offset=offset,unit=unit,location=lockey,lat=lat,lon=lon,
-                   validation_figures=validation_figures)
+                   validation_figures=validation_figures,instance=instance)
             self._bst_add(bst,bstfile)
         return
 
 
-    def bst_train_and_validate(self,species=None,location=None):
+    def bst_train_and_validate(self,species=None,location=None,instance=None):
         '''Train the model'''
-        bst = self.bst_get(species,location)
+        bst = self.bst_get(species,location,instance)
         params = self._read_config('xgboost_params')
         bst.train(self._Xtrain,self._Ytrain,params=params)
         bst.validate(self._Xvalid,self._Yvalid)
         return
 
 
-    def bst_predict(self,species=None,location=None):
+    def bst_predict(self,species=None,location=None,instance=None):
         '''Make prediction'''
-        bst = self.bst_get(species,location)
+        bst = self.bst_get(species,location,instance)
         if bst is not None:
             prior,Ypred = bst.predict(self._Xpred)
         else:
@@ -255,11 +255,11 @@ class CFBoost(object):
         return prior,Ypred
 
 
-    def bst_get(self,species=None,location=None,bstfile=None,load_if_not_found=True):
+    def bst_get(self,species=None,location=None,instance=None,bstfile=None,load_if_not_found=True):
         '''Return the booster object for the given species and location'''
         log = logging.getLogger(__name__)
         if bstfile is None:
-            bstfile = self._get_bstfile(location=location,species=species)
+            bstfile = self._get_bstfile(location=location,species=species,instance=instance)
         if bstfile not in self._bstobj and load_if_not_found:
             self.bst_load(bstfile=bstfile,not_found_ok=True)
         if bstfile not in self._bstobj:
@@ -270,11 +270,11 @@ class CFBoost(object):
         return bst
 
 
-    def bst_save(self,species=None,location=None,bstfile=None):
+    def bst_save(self,species=None,location=None,instance=None,bstfile=None):
         '''Save the booster object to disk'''
         log = logging.getLogger(__name__)
         dummy_date = dt.datetime(2018,1,1)
-        bst = self.bst_get(species,location)
+        bst = self.bst_get(species=species,location=location,instance=instance)
         if bst is not None:
             bstfile = bst._bstfile if bstfile is None else bstfile
             check_dir(bstfile,dummy_date)
@@ -283,11 +283,11 @@ class CFBoost(object):
         return
 
 
-    def bst_load(self,bstfile=None,species=None,location=None,not_found_ok=False):
+    def bst_load(self,bstfile=None,species=None,location=None,instance=None,not_found_ok=False):
         '''Load booster object'''
         log = logging.getLogger(__name__)
         if bstfile is None:
-            bstfile = self._get_bstfile( location=location, species=species )
+            bstfile = self._get_bstfile( location=location, species=species, instance=instance )
         if not os.path.exists(bstfile):
             if not_found_ok:
                 log.warning('File not found: {}'.format(bstfile))
@@ -297,6 +297,14 @@ class CFBoost(object):
             bst = pickle.load(open(bstfile,"rb"))
             self._bst_add(bst,bstfile)
         return
+
+
+    def bst_features(self,importance_type='gain',**kwargs):
+        '''Get table with feature importances for a given booster object'''
+        log = logging.getLogger(__name__)
+        bst = self.bst_get(**kwargs)
+        features = bst.get_features(importance_type=importance_type)
+        return features
 
 
     def _init_prediction_table(self,initdate,loc,lat,lon,var_PS,var_T,var_TPREC,var_U,var_V,scal_PS=1.0):
@@ -340,13 +348,13 @@ class CFBoost(object):
         return
 
 
-    def _get_bstfile(self, location, species):
+    def _get_bstfile(self, location, species, instance=None):
         '''Return the booster object filename'''
         lockey,locname,lat,lon,region = get_location_info(self._config,location)
         speckey,specname,mw,type,unit,transform,offset = get_species_info(self._config,species)
         xgbconfig = self._read_config('xgboost_config')
-        bstfile = self._read_config('bstfile',config=xgbconfig,default='bst_%l_%s_%t.pkl')
-        bstfile = filename_parse(bstfile,lockey,speckey,type)
+        bstfile = self._read_config('bstfile',config=xgbconfig,default='bst_%l_%s_%t_%n.pkl')
+        bstfile = filename_parse(bstfile,lockey,speckey,type,instance=instance)
         return bstfile
 
 
