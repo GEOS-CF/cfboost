@@ -197,9 +197,17 @@ class BoosterObj(object):
         return Xnew
 
 
-    def get_features(**kwargs):
+    def get_features(self,**kwargs):
         '''Return features of the booster object'''
         return self._bst.get_score(**kwargs)
+
+
+    def get_shap_values(self,X):
+        '''Return the SHAP values for features array X'''
+        import shap
+        explainer = shap.TreeExplainer(self._bst)
+        shap_values = explainer.shap_values(X)
+        return shap_values
 
 
 def plot_scatter(ax,x,y,minval,maxval,xlab,ylab,title):

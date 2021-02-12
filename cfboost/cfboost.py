@@ -307,6 +307,14 @@ class CFBoost(object):
         return features
 
 
+    def get_shap(self,X,**kwargs):
+        '''Get SHAP values for features array X''' 
+        log = logging.getLogger(__name__)
+        bst = self.bst_get(**kwargs)
+        shap_values = bst.get_shap_values(X)
+        return shap_values
+
+
     def _init_prediction_table(self,initdate,loc,lat,lon,var_PS,var_T,var_TPREC,var_U,var_V,scal_PS=1.0):
         '''Initialize table with model data & predictions'''
         log = logging.getLogger(__name__)
