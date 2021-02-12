@@ -126,7 +126,11 @@ def prepare_training_data(mod,obs,config,location,species=None,check_latlon=Fals
         Ytrain = np.concatenate(obs_split)
     # split randomly
     else:
-        Xtrain,Xvalid,Ytrain,Yvalid = train_test_split( mod_reduced, predicted_values, **kwargs )
+        if mod_reduced.shape[0]<=1:
+            log.warning('Full dataset is of length 1 or smaller, cannot split into train and test')
+            return None,None,None,None
+        else:
+            Xtrain,Xvalid,Ytrain,Yvalid = train_test_split( mod_reduced, predicted_values, **kwargs )
     return Xtrain, Xvalid, Ytrain, Yvalid
 
 
