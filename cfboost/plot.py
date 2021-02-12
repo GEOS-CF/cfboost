@@ -33,10 +33,11 @@ def plot_pred_vs_obs(modtable,obs,**kwargs):
     return
 
 
-def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1D',loccol='original_station_name',titlecol=None,**kwargs):
+def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1D',loccol='original_station_name',titlecol=None,modtable2=None,obs2=None,**kwargs):
     '''Plot predictions vs observations.'''
     log = logging.getLogger(__name__)
     idat = modtable.loc[modtable['Location']==iloc]
+    idat2 = modtable2.loc[modtable2['Location']==iloc] if modtable2 is not None else None
     if idat.shape[0]==0:
         log.warning('Location {} not found in table - skip'.format(iloc))
         return
@@ -57,14 +58,21 @@ def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1
         if iobs.shape[0]==0:
             log.info('no {} observations found for {}'.format(ispec,iloc))
             continue
+        iobs2 = obs2.loc[(obs2[loccol]==iloc)&(obs2.obstype==obsspec)].copy() if obs2 is not None else None
         origvar = [i for i in modtable.keys() if ispec+'_orig_' in i][0]
         mlvar   = [i for i in modtable.keys() if ispec+'_ML_' in i][0]
         munit = origvar.split('[')[1]
         ldat = idat.merge(iobs[['ISO8601','unit','value']],on='ISO8601',how='outer')
         ldat = _check_units(ldat,ispec,munit)
         ldat = ldat.groupby('ISO8601').mean().resample(sample_freq).mean().reset_index()
+        if idat2 is not None and iobs2 is not None:
+            ldat2 = idat2.merge(iobs2[['ISO8601','unit','value']],on='ISO8601',how='outer')
+            ldat2 = _check_units(ldat2,ispec,munit)
+            ldat2 = ldat2.groupby('ISO8601').mean().resample(sample_freq).mean().reset_index()
+        else:
+            ldat2 = None
         ax = fig.add_subplot(nrow,ncol,irow+1)
-        _plot_single_ts(ax,ldat,ispec,munit,origvar,mlvar,**kwargs)
+        _plot_single_ts(ax,ldat,ldat2,ispec,munit,origvar,mlvar,**kwargs)
         cnt += 1
     # clean up
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -76,7 +84,7 @@ def _plot_ts(modtable,obs,iloc,ofile_template='mod_vs_obs_%l.png',sample_freq='1
     return
 
 
-def _plot_single_ts(ax,ldat,ispec,munit,origvar,mlvar,obsvar='value',title=None,bias=False,label1='Model',label2='Model + ML',label3='Observation'):
+def _plot_single_ts(ax,ldat,ldat2,ispec,munit,origvar,mlvar,obsvar='value',title=None,bias=False,label1='Model',label2='Model + ML',label3='Observation'):
     xlocs = [dt.datetime(2018,1,1),dt.datetime(2019,1,1),dt.datetime(2020,1,1)]
     xlabs = [i.strftime('%Y') for i in xlocs].copy()
     xticks = []
@@ -86,21 +94,26 @@ def _plot_single_ts(ax,ldat,ispec,munit,origvar,mlvar,obsvar='value',title=None,
         idate = idate + dt.timedelta(days=35)
         idate = dt.datetime(idate.year,idate.month,1)
     # select data to plot
-    xdat = np.array(ldat.ISO8601)
-    ref = ldat[origvar]-ldat['value'] if bias else ldat[origvar]
-    ml  = ldat[mlvar]-ldat['value'] if bias else ldat[mlvar]
-    obs = None if bias else ldat['value']
+    xref = np.array(ldat.ISO8601)
+    xml  = np.array(ldat.ISO8601)
+    ref  = ldat[origvar]-ldat['value'] if bias else ldat[origvar]
+    ml   = ldat[mlvar]-ldat['value'] if bias else ldat[mlvar]
+    obs  = None if bias else ldat['value']
+    if ldat2 is not None:
+        ref = ml
+        xml = np.array(ldat2.ISO8601)
+        ml  = ldat2[mlvar]-ldat2['value'] if bias else ldat2[mlvar]
     col1 = 'black' if bias else 'dimgray'
     col2 = 'red' if bias else 'black'
     col3 = 'red'
     # plot
     if bias:
         plt.axhline(0.0,color='black')
-    ax.plot(xdat,np.array(ref),color=col1,linewidth=2,label=label1,alpha=0.75)
-    ax.plot(xdat,np.array(ml),color=col2,linewidth=2,alpha=0.75,label=label2)
+    ax.plot(xref,np.array(ref),color=col1,linewidth=2,label=label1,alpha=0.75)
+    ax.plot(xml,np.array(ml),color=col2,linewidth=2,alpha=0.75,label=label2)
     ncols=2
     if obs is not None:
-        ax.plot(xdat,np.array(obs),color=col3,linewidth=2,alpha=0.75,label=label3)
+        ax.plot(xml,np.array(obs),color=col3,linewidth=2,alpha=0.75,label=label3)
         ncols+=1
     ax.legend(loc='upper left',ncol=ncols,frameon=False,bbox_to_anchor=(0.0,1.00))
     ax.set_xlim([min(xlocs),max(xlocs)])
